@@ -153,3 +153,13 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Family Reward Planner listening on ${PORT}`);
 });
+
+function shutdown(signal) {
+  console.log(`Family Reward Planner received ${signal}, shutting down`);
+  server.close(() => {
+    process.exit(0);
+  });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

@@ -51,27 +51,41 @@ Backend sprawdza kilka typowych nagłówków ingress/user:
 
 Jeśli `parent_users` jest puste, panel rodzica jest dostępny dla każdego użytkownika, który ma dostęp do ingress add-ona. Po pierwszym uruchomieniu w Home Assistant trzeba sprawdzić w logach/nagłówkach, który identyfikator użytkownika przekazuje Twoja instalacja, i wpisać go w opcjach.
 
-## Instalacja lokalna w Home Assistant OS
+## Instalacja w Home Assistant bez terminala
 
-1. Skopiuj folder add-ona do lokalnego repozytorium add-onów, np. przez Samba/Studio Code Server:
+Docelowo aplikację instalujemy z repozytorium GitHub, a nie przez ręczne kopiowanie plików w terminalu.
 
-```text
-/addons/family_reward_planner
-```
+1. Otwórz Home Assistant w przeglądarce.
 
-2. W Home Assistant przejdź do:
+2. Wejdź w ekran zarządzania dodatkami/aplikacjami w Home Assistant.
 
-```text
-Ustawienia -> Dodatki -> Sklep z dodatkami -> ... -> Repozytoria
-```
+3. Otwórz listę repozytoriów dodatków/aplikacji.
 
-3. Dodaj lokalne repozytorium albo odśwież lokalne dodatki.
+4. Dodaj adres repozytorium GitHub z aplikacją `Domowy Planner Nagród`.
 
-4. Zainstaluj `Domowy Planner Nagród`.
+5. Odśwież listę dostępnych aplikacji/dodatków.
 
-5. W konfiguracji add-ona ustaw `parent_users`, jeśli chcesz ograniczyć `/parent`.
+6. Wybierz `Domowy Planner Nagród` i kliknij instalację.
 
-6. Uruchom add-on i otwórz panel `Planner Nagród`.
+7. W konfiguracji aplikacji ustaw `parent_users`, jeśli chcesz ograniczyć `/parent` tylko do kont rodziców.
+
+8. Uruchom aplikację i otwórz panel `Planner Nagród`.
+
+Aktualizacje również wykonujemy z interfejsu Home Assistant:
+
+1. Wgrywamy nową wersję do GitHuba.
+
+2. W Home Assistant odświeżamy repozytorium aplikacji/dodatków.
+
+3. Jeśli pojawi się aktualizacja `Domowy Planner Nagród`, klikamy aktualizację z poziomu UI.
+
+Nie zakładamy używania terminala HA do instalacji ani aktualizacji. Terminal zostaje tylko jako awaryjne narzędzie diagnostyczne, np. gdy trzeba sprawdzić szczegółowe logi.
+
+## Tymczasowa instalacja lokalna
+
+Ten wariant jest tylko do testów deweloperskich. Nie jest docelową ścieżką dla domowego użycia.
+
+Folder add-ona można umieścić w lokalnym repozytorium Home Assistant przez Samba albo Studio Code Server, a potem zainstalować z interfejsu HA. Po przejściu na repo GitHub ten rozdział można usunąć.
 
 ## Lokalny development
 
