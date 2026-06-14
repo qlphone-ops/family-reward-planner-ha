@@ -1,0 +1,4 @@
+#!/usr/bin/with-contenv sh
+
+echo "Starting Family Reward Planner parent shortcut"
+exec node /app/server.js

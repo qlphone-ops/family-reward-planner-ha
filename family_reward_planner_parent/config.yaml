@@ -1,0 +1,18 @@
+name: Planner Nagród - Rodzic
+version: "0.1.0"
+slug: family_reward_planner_parent
+description: Skrót do panelu rodzica aplikacji Domowy Planner Nagród.
+arch:
+  - aarch64
+  - amd64
+startup: services
+boot: auto
+init: false
+ingress: true
+ingress_port: 8098
+ingress_entry: /
+panel_icon: mdi:account-child
+panel_title: Planner Rodzica
+panel_admin: true
+options: {}
+schema: {}

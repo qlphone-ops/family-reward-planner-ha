@@ -474,10 +474,7 @@ function render() {
 function renderTopBadges(child) {
   return `
     <div class="top-actions">
-      <div class="badge">
-        <span class="icon-box day-icon ${dayIconClass(child)}" aria-label="${dayIconLabel(child)}"><span></span></span>
-        <span><small>${dayName()}</small><strong>${childDayLabel(child)}</strong></span>
-      </div>
+      ${renderDayBadge(child)}
       <div class="badge balance-badge">
         <span><small>Dostępne saldo</small></span>
         ${renderStarToken(child, "star-token-compact")}
@@ -486,14 +483,24 @@ function renderTopBadges(child) {
   `;
 }
 
+function renderDayBadge(child = null) {
+  const dayLabel = child ? childDayLabel(child) : systemDayTypeLabel();
+  return `
+    <div class="badge day-badge">
+      <span class="icon-box day-icon ${dayIconClass(child)}" aria-label="${dayIconLabel(child)}"><span></span></span>
+      <span><small>${dayName()}</small><strong>${dayLabel}</strong></span>
+    </div>
+  `;
+}
+
 function dayIconClass(child) {
-  if (isExcused(child)) return "day-icon-excused";
+  if (child && isExcused(child)) return "day-icon-excused";
   if (systemDayTypeLabel() === "wakacje") return "day-icon-vacation";
   return systemDayTypeLabel() === "dzień szkolny" ? "day-icon-school" : "day-icon-free";
 }
 
 function dayIconLabel(child) {
-  if (isExcused(child)) return "Dzień usprawiedliwiony";
+  if (child && isExcused(child)) return "Dzień usprawiedliwiony";
   if (systemDayTypeLabel() === "wakacje") return "Wakacje";
   return systemDayTypeLabel() === "dzień szkolny" ? "Dzień szkolny" : "Dzień wolny od szkoły";
 }
@@ -516,12 +523,11 @@ function renderHome() {
           <h1>Domowy Planner Nagród</h1>
           <p>Wybierz swoją kartę i domknij dzień po swojemu.</p>
         </div>
+        <div class="top-actions home-top-actions">
+          ${renderDayBadge()}
+        </div>
       </div>
       <div class="grid-2">${cards}</div>
-      <div class="bottom-strip">
-        <span>Dzisiaj: ${dayName()}, ${systemDayTypeLabel()}</span>
-        <button class="ghost" data-reset>Reset prototypu</button>
-      </div>
       ${toast()}
     </section>
   `;
@@ -1139,14 +1145,6 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-delete-vacation]").forEach((button) => {
     button.addEventListener("click", () => deleteVacationRange(button.dataset.deleteVacation));
-  });
-  document.querySelector("[data-reset]")?.addEventListener("click", () => {
-    localStorage.removeItem(STORE_KEY);
-    state = structuredClone(initialState);
-    state.view = isParentModule ? "parent" : "home";
-    redeemConfirmId = "";
-    parentUnlocked = isParentModule;
-    showToast("Prototyp zresetowany");
   });
 }
 

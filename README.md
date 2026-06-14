@@ -10,6 +10,7 @@ Home Assistant OS app/add-on dla rodzinnego planera obowiązków:
 - dni wolne od szkoły,
 - tryb wakacji,
 - osobny moduł dziecka i rodzica.
+- osobny skrót menu Home Assistant dla panelu rodzica.
 
 ## Moduły
 
@@ -17,6 +18,12 @@ Home Assistant OS app/add-on dla rodzinnego planera obowiązków:
 - `/parent` - panel rodzica do akceptacji kuponów i zarządzania obowiązkami, nagrodami oraz kalendarzem.
 
 W add-onie `ingress_entry` wskazuje domyślnie `/child`, czyli panel w sidebarze otwiera ekran dziecięcy.
+
+Repozytorium zawiera też drugi, lekki add-on:
+
+- `Planner Nagród - Rodzic` - osobny skrót w menu Home Assistant, który przekierowuje do `/parent` głównej aplikacji.
+
+Ten drugi add-on nie przechowuje danych. Służy wyłącznie jako wygodne wejście dla rodzica w aplikacji mobilnej Home Assistant.
 
 ## Dane
 
@@ -71,9 +78,11 @@ https://github.com/qlphone-ops/family-reward-planner-ha
 
 6. Wybierz `Domowy Planner Nagród` i kliknij instalację.
 
-7. W konfiguracji aplikacji ustaw `parent_users`, jeśli chcesz ograniczyć `/parent` tylko do kont rodziców.
+7. Opcjonalnie zainstaluj też `Planner Nagród - Rodzic`, jeśli chcesz mieć osobny skrót do panelu rodzica w menu Home Assistant.
 
-8. Uruchom aplikację i otwórz panel `Planner Nagród`.
+8. W konfiguracji aplikacji ustaw `parent_users`, jeśli chcesz ograniczyć `/parent` tylko do kont rodziców.
+
+9. Uruchom aplikację i otwórz panel `Planner Nagród`.
 
 Aktualizacje również wykonujemy z interfejsu Home Assistant:
 
