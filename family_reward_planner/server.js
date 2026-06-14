@@ -101,7 +101,15 @@ async function serveIndex(req, res, moduleName, appOptions) {
 }
 
 function ingressPrefix(pathname) {
-  const firstSegment = pathname.split("/").filter(Boolean)[0] || "";
+  const segments = pathname.split("/").filter(Boolean);
+  const firstSegment = segments[0] || "";
+  const secondSegment = segments[1] || "";
+  if (firstSegment === "app" && secondSegment.endsWith("_family_reward_planner")) {
+    return `/${firstSegment}/${secondSegment}`;
+  }
+  if (firstSegment === "app" && secondSegment === "family_reward_planner") {
+    return `/${firstSegment}/${secondSegment}`;
+  }
   if (firstSegment === "family_reward_planner") return `/${firstSegment}`;
   if (firstSegment.endsWith("_family_reward_planner")) return `/${firstSegment}`;
   return "";
