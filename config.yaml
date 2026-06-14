@@ -1,0 +1,27 @@
+name: Domowy Planner Nagród
+version: "0.1.0"
+slug: family_reward_planner
+description: Planner obowiązków, gwiazdek, kuponów i nagród dla dzieci.
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: services
+boot: auto
+init: false
+ingress: true
+ingress_port: 8099
+ingress_entry: /child
+panel_icon: mdi:star-face
+panel_title: Planner Nagród
+options:
+  parent_users: []
+  child_module_title: Domowy Planner Nagród
+  parent_module_title: Panel rodzica
+schema:
+  parent_users:
+    - str
+  child_module_title: str
+  parent_module_title: str

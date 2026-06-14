@@ -91,7 +91,7 @@ const initialState = {
 
 const runtimeWindow = typeof window !== "undefined" ? window : {};
 const urlParams = new URLSearchParams(runtimeWindow.location?.search || "");
-const appModule = urlParams.get("module") === "parent" ? "parent" : "child";
+const appModule = runtimeWindow.__PLANNER_MODULE__ || (urlParams.get("module") === "parent" ? "parent" : "child");
 const isParentModule = appModule === "parent";
 
 let state = loadState();
@@ -114,12 +114,12 @@ function loadState() {
 }
 
 function saveState() {
-  const payload = JSON.stringify(state);
+  const payload = JSON.stringify(persistedState());
   localStorage.setItem(STORE_KEY, payload);
   if (!runtimeWindow.__PLANNER_API__) return;
   runtimeWindow.clearTimeout(saveTimer);
   saveTimer = runtimeWindow.setTimeout(() => {
-    fetch("./api/state", {
+    fetch(apiUrl("state"), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: payload,
@@ -131,6 +131,22 @@ function saveState() {
 
 function parentPin() {
   return String(runtimeWindow.__PLANNER_OPTIONS__?.parent_pin || "1234");
+}
+
+function persistedState() {
+  return {
+    ...state,
+    view: "home",
+    toast: "",
+  };
+}
+
+function apiUrl(name) {
+  const pathname = runtimeWindow.location?.pathname || "/";
+  const base = pathname.endsWith("/parent") || pathname.endsWith("/child")
+    ? pathname.replace(/\/(parent|child)$/, "")
+    : pathname.replace(/\/$/, "");
+  return `${base || ""}/api/${name}`;
 }
 
 function normalizeState(value) {
