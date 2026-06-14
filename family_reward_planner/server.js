@@ -7,6 +7,7 @@ const ROOT = __dirname;
 const DATA_DIR = process.env.PLANNER_DATA_DIR || "/data";
 const STATE_FILE = path.join(DATA_DIR, "planner-state.json");
 const OPTIONS_FILE = "/data/options.json";
+const APP_VERSION = require("./package.json").version;
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -81,7 +82,11 @@ async function serveIndex(req, res, moduleName, appOptions) {
     return json(res, 403, { error: "parent_module_forbidden" });
   }
   const state = await readJson(STATE_FILE, null);
-  const html = await fs.readFile(path.join(ROOT, "index.html"), "utf8");
+  const [html, css, js] = await Promise.all([
+    fs.readFile(path.join(ROOT, "index.html"), "utf8"),
+    fs.readFile(path.join(ROOT, "styles.css"), "utf8"),
+    fs.readFile(path.join(ROOT, "app.js"), "utf8"),
+  ]);
   const bootstrap = [
     "<script>",
     `window.__PLANNER_API__ = true;`,
@@ -93,11 +98,14 @@ async function serveIndex(req, res, moduleName, appOptions) {
     `window.__PLANNER_STATE__ = ${JSON.stringify(state)};`,
     "</script>",
   ].join("");
+  const inlineHtml = html
+    .replace(/<link rel="stylesheet" href="\.\/styles\.css[^"]*" \/>/, `<style>${css}</style>`)
+    .replace(/<script src="\.\/app\.js[^"]*"><\/script>/, `<script>${js}</script>`);
   res.writeHead(200, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
   });
-  res.end(html.replace("</head>", `${bootstrap}</head>`));
+  res.end(inlineHtml.replace("</head>", `${bootstrap}</head>`));
 }
 
 function ingressPrefix(pathname) {
@@ -157,7 +165,7 @@ async function handle(req, res) {
   }
   const pathname = stripIngressPrefix(url.pathname).replace(/\/+$/, "") || "/";
 
-  if (pathname === "/healthz") return json(res, 200, { ok: true });
+  if (pathname === "/healthz") return json(res, 200, { ok: true, version: APP_VERSION });
   if (pathname === "/api/options") return json(res, 200, appOptions);
 
   if (pathname === "/api/state") {
@@ -186,7 +194,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Family Reward Planner listening on ${PORT}`);
+  console.log(`Family Reward Planner ${APP_VERSION} listening on ${PORT}`);
 });
 
 function shutdown(signal) {
