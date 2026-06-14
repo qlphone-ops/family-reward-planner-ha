@@ -1,0 +1,1404 @@
+const STORE_KEY = "domowy-planner-prototype-v2";
+
+const initialState = {
+  view: "home",
+  activeChildId: "julian",
+  toast: "",
+  dayExcuses: {},
+  dayOverrides: {},
+  vacationRanges: [],
+  children: {
+    julian: {
+      id: "julian",
+      name: "Julian",
+      accent: "#315aa8",
+      soft: "#e8f2ff",
+      avatarBg: "#dbeaff",
+      hair: "#4d81e5",
+      stars: 5,
+      starAwardedToday: false,
+      tasks: {
+        morning: [
+          { id: "j-m-1", label: "Posciel łóżko", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "j-m-2", label: "Umyj zęby", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "j-m-3", label: "Spakuj plecak", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "j-w-m-1", label: "Ubranie po śniadaniu", done: true, days: [0, 6] },
+          { id: "j-w-m-2", label: "Porządek po sobie", done: false, days: [0, 6] },
+        ],
+        after: [
+          { id: "j-a-1", label: "Odłóż plecak", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "j-a-2", label: "Lunchbox do kuchni", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "j-a-3", label: "Praca domowa", done: false, days: [1, 2, 3, 4, 5] },
+          { id: "j-w-a-1", label: "Pomoc przy stole", done: true, days: [0, 6] },
+          { id: "j-w-a-2", label: "15 minut czytania", done: false, days: [0, 6] },
+        ],
+        evening: [
+          { id: "j-e-1", label: "Piżama", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "j-e-2", label: "Umyj zęby", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "j-e-3", label: "Przygotuj ubranie", done: false, days: [1, 2, 3, 4, 5] },
+          { id: "j-e-4", label: "Porządek w pokoju", done: false, days: [1, 2, 3, 4, 5] },
+          { id: "j-w-e-1", label: "Odłóż zabawki", done: false, days: [0, 6] },
+          { id: "j-w-e-2", label: "Umyj zęby", done: true, days: [0, 6] },
+        ],
+      },
+    },
+    zosia: {
+      id: "zosia",
+      name: "Zosia",
+      accent: "#d5554d",
+      soft: "#ffecea",
+      avatarBg: "#ffe1dc",
+      hair: "#d86a43",
+      stars: 3,
+      starAwardedToday: true,
+      tasks: {
+        morning: [
+          { id: "z-m-1", label: "Posciel łóżko", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "z-m-2", label: "Umyj zęby", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "z-m-3", label: "Spakuj plecak", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "z-w-m-1", label: "Ubranie po śniadaniu", done: true, days: [0, 6] },
+          { id: "z-w-m-2", label: "Porządek po sobie", done: true, days: [0, 6] },
+        ],
+        after: [
+          { id: "z-a-1", label: "Odłóż plecak", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "z-a-2", label: "Lunchbox do kuchni", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "z-w-a-1", label: "Pomoc przy stole", done: true, days: [0, 6] },
+        ],
+        evening: [
+          { id: "z-e-1", label: "Piżama", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "z-e-2", label: "Umyj zęby", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "z-e-3", label: "Przygotuj ubranie", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "z-e-4", label: "Porządek w pokoju", done: true, days: [1, 2, 3, 4, 5] },
+          { id: "z-w-e-1", label: "Odłóż zabawki", done: true, days: [0, 6] },
+          { id: "z-w-e-2", label: "Umyj zęby", done: true, days: [0, 6] },
+        ],
+      },
+    },
+  },
+  rewards: [
+    { id: "movie", title: "Wybór bajki", cost: 1, icon: "play", color: "#f3b33d", childIds: ["julian", "zosia"] },
+    { id: "game20", title: "20 minut grania", cost: 2, icon: "pad", color: "#2a9254", childIds: ["julian", "zosia"] },
+    { id: "game30", title: "30 minut grania", cost: 3, icon: "pad", color: "#7055ca", childIds: ["julian"] },
+    { id: "weekend", title: "Nagroda weekendowa", cost: 5, icon: "calendar", color: "#315aa8", childIds: ["julian", "zosia"] },
+    { id: "trip", title: "Duża wyprawa", cost: 10, icon: "compass", color: "#9aa3af", childIds: ["julian", "zosia"] },
+  ],
+  coupons: [
+    { id: "coupon-1", childId: "julian", rewardId: "game30", status: "pending", createdAt: Date.now() - 100000 },
+    { id: "coupon-2", childId: "julian", rewardId: "movie", status: "ready", createdAt: Date.now() - 200000 },
+  ],
+  history: [],
+};
+
+const runtimeWindow = typeof window !== "undefined" ? window : {};
+const urlParams = new URLSearchParams(runtimeWindow.location?.search || "");
+const appModule = urlParams.get("module") === "parent" ? "parent" : "child";
+const isParentModule = appModule === "parent";
+
+let state = loadState();
+let redeemConfirmId = "";
+let parentUnlocked = isParentModule;
+let parentTargetView = "parent";
+let saveTimer = 0;
+const app = document.querySelector("#app");
+
+function loadState() {
+  try {
+    if (runtimeWindow.__PLANNER_STATE__) {
+      return normalizeState(structuredClone(runtimeWindow.__PLANNER_STATE__));
+    }
+    const raw = localStorage.getItem(STORE_KEY);
+    return normalizeState(raw ? JSON.parse(raw) : structuredClone(initialState));
+  } catch {
+    return normalizeState(structuredClone(initialState));
+  }
+}
+
+function saveState() {
+  const payload = JSON.stringify(state);
+  localStorage.setItem(STORE_KEY, payload);
+  if (!runtimeWindow.__PLANNER_API__) return;
+  runtimeWindow.clearTimeout(saveTimer);
+  saveTimer = runtimeWindow.setTimeout(() => {
+    fetch("./api/state", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: payload,
+    }).catch(() => {
+      localStorage.setItem(`${STORE_KEY}-pending-sync`, payload);
+    });
+  }, 250);
+}
+
+function parentPin() {
+  return String(runtimeWindow.__PLANNER_OPTIONS__?.parent_pin || "1234");
+}
+
+function normalizeState(value) {
+  const childIds = Object.keys(value.children || initialState.children);
+  value.view = value.view || "home";
+  value.activeChildId = value.activeChildId || "julian";
+  value.toast = "";
+  value.dayExcuses = value.dayExcuses || {};
+  value.dayOverrides = value.dayOverrides || {};
+  value.vacationRanges = value.vacationRanges || [];
+  value.history = value.history || [];
+  Object.values(value.children || {}).forEach((child) => {
+    child.starAwardedToday = Boolean(child.starAwardedToday);
+    Object.entries(child.tasks || {}).forEach(([period, tasks]) => {
+      tasks.forEach((task, index) => {
+        task.days = task.days?.length ? task.days : [1, 2, 3, 4, 5];
+        task.groupId = task.groupId || stableTaskGroupId(period, task.label);
+        task.order = Number.isFinite(task.order) ? task.order : periodIndex(period) * 100 + index;
+      });
+    });
+  });
+  value.rewards = (value.rewards || initialState.rewards).map((reward) => ({
+    ...reward,
+    childIds: reward.childIds?.length ? reward.childIds : childIds,
+  }));
+  value.coupons = value.coupons || [];
+  return value;
+}
+
+function periods() {
+  return [
+    { id: "morning", title: "Rano", art: "sun", accent: "#2a9254", soft: "#eef9f1" },
+    { id: "after", title: "Po szkole", art: "home", accent: "#315aa8", soft: "#eef4ff" },
+    { id: "evening", title: "Wieczór", art: "moon", accent: "#7055ca", soft: "#f4f0ff" },
+  ];
+}
+
+function periodById(id) {
+  return periods().find((period) => period.id === id) || periods()[0];
+}
+
+function periodIndex(id) {
+  return Math.max(0, periods().findIndex((period) => period.id === id));
+}
+
+function slugify(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "obowiazek";
+}
+
+function stableTaskGroupId(period, label) {
+  return `chore-${period}-${slugify(label)}`;
+}
+
+function nextChoreOrder() {
+  const orders = choreGroups().map((group) => group.order);
+  return orders.length ? Math.max(...orders) + 10 : 10;
+}
+
+function findTaskByGroup(child, groupId) {
+  for (const period of periods()) {
+    const task = (child.tasks[period.id] || []).find((item) => item.groupId === groupId);
+    if (task) return { task, periodId: period.id };
+  }
+  return null;
+}
+
+function removeTaskByGroup(child, groupId) {
+  Object.keys(child.tasks).forEach((periodId) => {
+    child.tasks[periodId] = child.tasks[periodId].filter((task) => task.groupId !== groupId);
+  });
+}
+
+function choreGroups() {
+  const groups = new Map();
+  Object.values(state.children).forEach((child) => {
+    Object.entries(child.tasks || {}).forEach(([periodId, tasks]) => {
+      tasks.forEach((task) => {
+        const groupId = task.groupId || stableTaskGroupId(periodId, task.label);
+        if (!groups.has(groupId)) {
+          groups.set(groupId, {
+            id: groupId,
+            label: task.label,
+            periodId,
+            days: task.days || weekDays(),
+            order: Number.isFinite(task.order) ? task.order : periodIndex(periodId) * 100,
+            childIds: [],
+          });
+        }
+        const group = groups.get(groupId);
+        group.order = Math.min(group.order, Number.isFinite(task.order) ? task.order : group.order);
+        if (!group.childIds.includes(child.id)) group.childIds.push(child.id);
+      });
+    });
+  });
+  return Array.from(groups.values()).sort((a, b) => a.order - b.order || periodIndex(a.periodId) - periodIndex(b.periodId) || a.label.localeCompare(b.label));
+}
+
+function today() {
+  return new Date();
+}
+
+function dateKey(date = today()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function currentDayIndex() {
+  return today().getDay();
+}
+
+function dayName(index = currentDayIndex()) {
+  return ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"][index];
+}
+
+function dayShortName(index) {
+  if (index === 7) return "Wakacje";
+  return ["Nd", "Pn", "Wt", "Śr", "Cz", "Pt", "So"][index];
+}
+
+function weekDays() {
+  return [1, 2, 3, 4, 5];
+}
+
+function weekendDays() {
+  return [0, 6];
+}
+
+function allWeekDays() {
+  return [1, 2, 3, 4, 5, 6, 0, 7];
+}
+
+function daysLabel(days = []) {
+  const sorted = [...days].sort((a, b) => allWeekDays().indexOf(a) - allWeekDays().indexOf(b));
+  if (sorted.length === 8) return "codziennie + wakacje";
+  if (sorted.length === 7 && !sorted.includes(7)) return "codziennie";
+  if (weekDays().every((day) => sorted.includes(day)) && sorted.length === 5) return "dni szkolne";
+  if (weekendDays().every((day) => sorted.includes(day)) && sorted.length === 2) return "weekend";
+  if (sorted.length === 1 && sorted[0] === 7) return "wakacje";
+  return sorted.map(dayShortName).join(", ");
+}
+
+function schoolDayOverride(key = dateKey()) {
+  return state.dayOverrides?.[key] || null;
+}
+
+function isSchoolFreeDay(key = dateKey()) {
+  return schoolDayOverride(key)?.type === "schoolFree";
+}
+
+function parseDateKey(key) {
+  const [year, month, day] = String(key || "").split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function isDateKeyInRange(key, range) {
+  return key >= range.start && key <= range.end;
+}
+
+function activeVacationRange(date = today()) {
+  const key = dateKey(date);
+  return (state.vacationRanges || []).find((range) => isDateKeyInRange(key, range));
+}
+
+function isVacationWeekday(date = today()) {
+  return Boolean(activeVacationRange(date)) && ![0, 6].includes(date.getDay());
+}
+
+function systemDayTypeLabel(date = today()) {
+  const key = dateKey(date);
+  if (isSchoolFreeDay(key)) return "dzień wolny";
+  if (isVacationWeekday(date)) return "wakacje";
+  return [0, 6].includes(date.getDay()) ? "weekend" : "dzień szkolny";
+}
+
+function effectiveTaskDayIndex(date = today()) {
+  if (isVacationWeekday(date)) return 7;
+  return isSchoolFreeDay(dateKey(date)) ? 6 : date.getDay();
+}
+
+function excuseKey(childId, key = dateKey()) {
+  return `${childId}:${key}`;
+}
+
+function isExcused(child) {
+  return Boolean(state.dayExcuses?.[excuseKey(child.id)]);
+}
+
+function childDayLabel(child) {
+  return isExcused(child) ? "usprawiedliwiony" : systemDayTypeLabel();
+}
+
+function taskAppliesToday(task) {
+  return (task.days || weekDays()).includes(effectiveTaskDayIndex());
+}
+
+function allTasks(child, options = {}) {
+  const tasks = Object.values(child.tasks || {}).flat();
+  if (options.includeAll) return tasks;
+  if (isExcused(child)) return [];
+  return tasks.filter(taskAppliesToday).sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+function taskStats(child) {
+  const tasks = allTasks(child);
+  const done = tasks.filter((task) => task.done).length;
+  return { done, total: tasks.length, remaining: Math.max(0, tasks.length - done) };
+}
+
+function periodStats(child, periodId) {
+  const tasks = (child.tasks[periodId] || []).filter((task) => !isExcused(child) && taskAppliesToday(task));
+  const done = tasks.filter((task) => task.done).length;
+  return { done, total: tasks.length };
+}
+
+function activeChild() {
+  return childById(state.activeChildId);
+}
+
+function childById(id) {
+  return state.children[id] || Object.values(state.children)[0];
+}
+
+function rewardById(id) {
+  return state.rewards.find((reward) => reward.id === id) || state.rewards[0];
+}
+
+function rewardAppliesToChild(reward, childId) {
+  return (reward.childIds || []).includes(childId);
+}
+
+function starWord(count) {
+  if (count === 1) return "gwiazdka";
+  if (count >= 2 && count <= 4) return "gwiazdki";
+  return "gwiazdek";
+}
+
+function remainingPhrase(count) {
+  if (count === 1) return "zostało 1 zadanie";
+  if (count >= 2 && count <= 4) return `zostały ${count} zadania`;
+  return `zostało ${count} zadań`;
+}
+
+function toStarPhrase(count) {
+  if (count === 1) return "Zostało 1 zadanie do gwiazdki";
+  if (count >= 2 && count <= 4) return `Zostały ${count} zadania do gwiazdki`;
+  return `Zostało ${count} zadań do gwiazdki`;
+}
+
+function earnedPhrase(child) {
+  return `${child.name} zdobył${child.name === "Zosia" ? "a" : ""} gwiazdkę`;
+}
+
+function styleVars(child, extra = "") {
+  return `style="--accent:${child.accent};--soft:${child.soft};--avatar-bg:${child.avatarBg};--hair:${child.hair};${extra}"`;
+}
+
+function icon(name) {
+  if (name === "play") return "▶";
+  if (name === "pad") return "+";
+  if (name === "calendar") return "▣";
+  if (name === "compass") return "◇";
+  return "✓";
+}
+
+function setView(view, childId = state.activeChildId) {
+  if (isParentView(view) && !isParentModule) {
+    state.view = "home";
+    redeemConfirmId = "";
+    render();
+    return;
+  }
+  if (isParentView(view) && !parentUnlocked) {
+    parentTargetView = view;
+    state.view = "parentGate";
+    state.activeChildId = childId;
+    redeemConfirmId = "";
+    render();
+    return;
+  }
+  state.view = view;
+  state.activeChildId = childId;
+  redeemConfirmId = "";
+  render();
+}
+
+function isParentView(view) {
+  return ["parent", "edit", "history", "rewardsAdmin", "dayAdmin"].includes(view);
+}
+
+function showToast(message) {
+  state.toast = message;
+  render();
+  setTimeout(() => {
+    if (state.toast === message) {
+      state.toast = "";
+      render();
+    }
+  }, 2200);
+}
+
+function render() {
+  if (isParentModule && !isParentView(state.view)) {
+    state.view = "parent";
+  }
+  if (!isParentModule && isParentView(state.view)) {
+    state.view = "home";
+  }
+  saveState();
+  if (state.view === "home") app.innerHTML = renderHome();
+  if (state.view === "child") app.innerHTML = renderChild(activeChild());
+  if (state.view === "shop") app.innerHTML = renderShop(activeChild());
+  if (state.view === "parentGate") app.innerHTML = isParentModule ? renderParentGate() : renderHome();
+  if (state.view === "parent") app.innerHTML = parentUnlocked ? renderParent() : renderParentGate();
+  if (state.view === "edit") app.innerHTML = parentUnlocked ? renderEdit() : renderParentGate();
+  if (state.view === "history") app.innerHTML = parentUnlocked ? renderHistory() : renderParentGate();
+  if (state.view === "rewardsAdmin") app.innerHTML = parentUnlocked ? renderRewardsAdmin() : renderParentGate();
+  if (state.view === "dayAdmin") app.innerHTML = parentUnlocked ? renderDayAdmin() : renderParentGate();
+  bindEvents();
+}
+
+function renderTopBadges(child) {
+  return `
+    <div class="top-actions">
+      <div class="badge">
+        <span class="icon-box day-icon ${dayIconClass(child)}" aria-label="${dayIconLabel(child)}"><span></span></span>
+        <span><small>${dayName()}</small><strong>${childDayLabel(child)}</strong></span>
+      </div>
+      <div class="badge balance-badge">
+        <span><small>Dostępne saldo</small></span>
+        ${renderStarToken(child, "star-token-compact")}
+      </div>
+    </div>
+  `;
+}
+
+function dayIconClass(child) {
+  if (isExcused(child)) return "day-icon-excused";
+  if (systemDayTypeLabel() === "wakacje") return "day-icon-vacation";
+  return systemDayTypeLabel() === "dzień szkolny" ? "day-icon-school" : "day-icon-free";
+}
+
+function dayIconLabel(child) {
+  if (isExcused(child)) return "Dzień usprawiedliwiony";
+  if (systemDayTypeLabel() === "wakacje") return "Wakacje";
+  return systemDayTypeLabel() === "dzień szkolny" ? "Dzień szkolny" : "Dzień wolny od szkoły";
+}
+
+function renderStarToken(child, className = "") {
+  return `
+    <div class="star-token ${className}" aria-label="${child.stars} ${starWord(child.stars)}">
+      <span class="star-token-icon">★</span>
+      <strong>${child.stars}</strong>
+    </div>
+  `;
+}
+
+function renderHome() {
+  const cards = Object.values(state.children).map(renderHomeChildCard).join("");
+  return `
+    <section class="screen">
+      <div class="topbar">
+        <div class="title-block">
+          <h1>Domowy Planner Nagród</h1>
+          <p>Wybierz swoją kartę i domknij dzień po swojemu.</p>
+        </div>
+      </div>
+      <div class="grid-2">${cards}</div>
+      <div class="bottom-strip">
+        <span>Dzisiaj: ${dayName()}, ${systemDayTypeLabel()}</span>
+        <button class="ghost" data-reset>Reset prototypu</button>
+      </div>
+      ${toast()}
+    </section>
+  `;
+}
+
+function renderHomeChildCard(child) {
+  const stats = taskStats(child);
+  const excused = isExcused(child);
+  const emptyToday = !excused && stats.total === 0;
+  const ready = stats.total > 0 && stats.remaining === 0;
+  return `
+    <article class="child-card ${ready ? "child-card-complete" : ""}" ${styleVars(child)} data-card-child="${child.id}" tabindex="0" role="button" aria-label="Otwórz kartę ${child.name}">
+      <div class="child-head">
+        <div class="avatar"><div class="profile-mark">${child.name.charAt(0)}</div></div>
+        <div>
+          <h2 class="child-name">${child.name}</h2>
+          <div class="child-meta">${excused ? "usprawiedliwiony" : ready ? "gwiazdka zdobyta" : "w trakcie"}</div>
+        </div>
+        ${renderStarToken(child)}
+      </div>
+      <div class="mission-card">
+        <div>
+          <h3>${excused ? "Dzień usprawiedliwiony" : emptyToday ? "Brak obowiązków na dziś" : ready ? "Dzisiejsza gwiazdka zdobyta" : toStarPhrase(stats.remaining)}</h3>
+          <div class="progress-track"><div class="progress-fill" style="width:${stats.total ? (stats.done / stats.total) * 100 : 100}%"></div></div>
+          <div class="child-meta">${stats.done}/${stats.total} zrobione dzisiaj</div>
+        </div>
+        <strong>${excused ? "✓" : emptyToday ? "•" : ready ? "★" : "→"}</strong>
+      </div>
+      <div class="period-summary">
+        ${periods().map((period) => {
+          const p = periodStats(child, period.id);
+          return `<button class="period-row" data-child="${child.id}">
+            <span class="period-mini period-${period.art}" style="--accent:${period.accent}"><span></span></span>
+            <span>${period.title}</span>
+            <span class="count-pill">${p.done}/${p.total}</span>
+          </button>`;
+        }).join("")}
+      </div>
+      <div class="card-affordance">Dotknij kartę</div>
+    </article>
+  `;
+}
+
+function renderChild(child) {
+  const stats = taskStats(child);
+  const excused = isExcused(child);
+  const emptyToday = !excused && stats.total === 0;
+  const complete = stats.total > 0 && stats.remaining === 0;
+  const hero = excused ? `${child.name} ma dzień usprawiedliwiony` : emptyToday ? `${child.name} nie ma dziś obowiązków` : complete ? earnedPhrase(child) : `${child.name}, ${remainingPhrase(stats.remaining)}`;
+  return `
+    <section class="screen">
+      <div class="topbar">
+        <div style="display:flex;align-items:center;gap:22px">
+          <button class="back-button" data-view="home">‹</button>
+          <div class="title-block">
+            <h1>Karta ${child.name === "Zosia" ? "Zosi" : "Juliana"}</h1>
+            <p>Dzisiaj: ${stats.done} z ${stats.total} obowiązków</p>
+          </div>
+        </div>
+        ${renderTopBadges(child)}
+      </div>
+      <div class="hero-card ${complete ? "hero-card-complete" : ""}" ${styleVars(child)}>
+        <div class="avatar"><div class="profile-mark">${child.name.charAt(0)}</div></div>
+        <div class="hero-copy">
+          <h2>${hero}</h2>
+          <p>${excused ? "Dzisiaj nie liczymy obowiązków ani gwiazdki." : emptyToday ? "Rodzic może dodać obowiązki na ten dzień tygodnia." : complete ? "Wszystkie obowiązki są zrobione." : "Po skończeniu całego dnia wpada jedna gwiazdka."}</p>
+          <div class="hero-progress">
+            <div class="progress-track"><div class="progress-fill" style="width:${stats.total ? (stats.done / stats.total) * 100 : 100}%"></div></div>
+            <span class="hero-score">${stats.done}/${stats.total}</span>
+          </div>
+        </div>
+        <div class="hero-side">
+          ${complete ? `<div class="hero-earned-badge"><span>★</span><strong>Gwiazdka dodana</strong><small>do salda</small></div>` : `<div class="drawer-icon">→</div>`}
+        </div>
+      </div>
+      <div class="section-grid">
+        ${periods().map((period) => renderTaskSection(child, period)).join("")}
+      </div>
+      <div class="bottom-strip">
+        <span>${excused ? "Dzień jest usprawiedliwiony przez rodzica." : emptyToday ? "Na dziś nie ma przypisanych obowiązków." : complete ? `Brawo ${child.name}. Dzisiejsza gwiazdka jest zdobyta.` : "Dobra robota. Zostały jeszcze drobiazgi."}</span>
+        <span>
+          <button class="secondary" data-view="home">Panel</button>
+          <button class="primary" data-view="shop">Sklep</button>
+        </span>
+      </div>
+      ${toast()}
+    </section>
+  `;
+}
+
+function renderTaskSection(child, period) {
+  const stats = periodStats(child, period.id);
+  const tasks = (child.tasks[period.id] || []).filter((task) => !isExcused(child) && taskAppliesToday(task)).sort((a, b) => (a.order || 0) - (b.order || 0));
+  return `
+    <section class="task-section" data-art="${period.art}" style="--accent:${period.accent};--soft:${period.soft}">
+      <div class="section-title">
+        <span class="section-label"><span class="period-mini period-${period.art}"><span></span></span>${period.title}</span>
+        <span class="count-pill">${stats.done}/${stats.total}</span>
+      </div>
+      <div class="task-list">
+        ${tasks.length ? tasks.map((task) => `
+          <button class="task-row ${task.done ? "done" : ""}" data-task="${task.id}" data-period="${period.id}">
+            <span class="check">${task.done ? "✓" : ""}</span>
+            <span>${task.label}</span>
+          </button>
+        `).join("") : `<div class="empty-row">${isExcused(child) ? "Dzień usprawiedliwiony" : "Brak obowiązków na dziś"}</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderShop(child) {
+  const coupons = state.coupons.filter((coupon) => coupon.childId === child.id && coupon.status !== "rejected");
+  const rewards = state.rewards.filter((reward) => rewardAppliesToChild(reward, child.id));
+  return `
+    <section class="screen">
+      <div class="topbar">
+        <div class="title-block">
+          <h1>Sklep nagród ${child.name === "Zosia" ? "Zosi" : "Juliana"}</h1>
+          <p>Wybierz nagrodę</p>
+        </div>
+        <div class="badge balance-badge">
+          <span><small>Dostępne saldo</small></span>
+          ${renderStarToken(child, "star-token-compact")}
+        </div>
+      </div>
+      <div class="shop-grid">
+        ${rewards.map((reward) => renderReward(child, reward)).join("")}
+      </div>
+      <section class="coupon-drawer">
+        <div class="drawer-icon">▤</div>
+        <div>
+          <h2>Szuflada kuponów</h2>
+          <p>Tu trafiają nagrody po wyborze. Rodzic zatwierdza, a kupon można odebrać teraz albo później.</p>
+          <div class="coupon-list">
+            ${coupons.length ? coupons.map(renderCoupon).join("") : `<div class="coupon"><span></span><div><h4>Brak kuponów</h4><small>Wybierz nagrodę ze sklepu.</small></div></div>`}
+          </div>
+        </div>
+      </section>
+      <div class="bottom-strip">
+        <span>${bigTripHint(child)}</span>
+        <span>
+          <button class="secondary" data-view="child">Karta</button>
+        </span>
+      </div>
+      ${renderRedeemConfirm()}
+      ${toast()}
+    </section>
+  `;
+}
+
+function renderReward(child, reward) {
+  const canBuy = child.stars >= reward.cost;
+  const pending = state.coupons.some((coupon) => coupon.childId === child.id && coupon.rewardId === reward.id && coupon.status === "pending");
+  const ready = state.coupons.some((coupon) => coupon.childId === child.id && coupon.rewardId === reward.id && coupon.status === "ready");
+  let status = { label: canBuy ? "Dostępne" : "Za mało", tone: canBuy ? "available" : "unavailable" };
+  if (pending) status = { label: "Czeka na rodzica", tone: "pending" };
+  if (ready) status = { label: "Gotowe do odebrania", tone: "ready" };
+  return `
+    <button class="reward-card ${canBuy || pending || ready ? "" : "disabled"}" style="--accent:${reward.color};--soft:${reward.id === "game30" ? "#f2edff" : "#eef9f1"}" data-reward="${reward.id}">
+      <span class="price-badge">${reward.cost} ★</span>
+      <div class="reward-art">${icon(reward.icon)}</div>
+      <h3>${reward.title}</h3>
+      <span class="status-badge status-${status.tone}">${status.label}</span>
+    </button>
+  `;
+}
+
+function renderCoupon(coupon) {
+  const reward = rewardById(coupon.rewardId);
+  const statusLabel = coupon.status === "pending" ? "Czeka na rodzica" : coupon.status === "ready" ? "Gotowe do odebrania" : "Wykorzystane";
+  const statusTone = coupon.status === "pending" ? "pending" : coupon.status === "ready" ? "ready" : "used";
+  const note = coupon.status === "pending" ? "Czeka na decyzje rodzica" : coupon.status === "ready" ? "Gotowe do odebrania" : "Trafiło do historii";
+  return `
+    <button class="coupon ${coupon.status === "ready" ? "ready" : ""}" data-coupon="${coupon.id}">
+      <span class="coupon-icon">${icon(reward.icon)}</span>
+      <span><h4>${reward.title}</h4><small>${note}</small></span>
+      <span class="price-badge">${reward.cost} ★</span>
+      <span class="status-badge status-${statusTone}">${statusLabel}</span>
+    </button>
+  `;
+}
+
+function bigTripHint(child) {
+  const trip = rewardById("trip");
+  const missing = Math.max(0, trip.cost - child.stars);
+  return missing ? `Do dużej wyprawy brakuje jeszcze ${missing} ${starWord(missing)}` : "Duża wyprawa jest dostępna";
+}
+
+function renderRedeemConfirm() {
+  const coupon = state.coupons.find((item) => item.id === redeemConfirmId);
+  if (!coupon) return "";
+  const reward = rewardById(coupon.rewardId);
+  return `
+    <div class="confirm-backdrop">
+      <div class="confirm-card">
+        <span class="coupon-icon">${icon(reward.icon)}</span>
+        <div>
+          <h2>Odebrać kupon?</h2>
+          <p>${reward.title} zostanie przeniesione do historii.</p>
+          <div class="confirm-actions">
+            <button class="secondary" data-cancel-redeem>Anuluj</button>
+            <button class="primary" data-confirm-redeem="${coupon.id}">Potwierdź odbiór</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderParentGate() {
+  return `
+    <section class="parent-shell">
+      <div class="parent-card">
+        <h1>Panel rodzica</h1>
+        <p class="child-meta">Wpisz PIN, aby zarządzać nagrodami, obowiązkami i dniami wolnymi.</p>
+        <form class="stack" data-parent-login>
+          <input name="pin" type="password" inputmode="numeric" placeholder="PIN rodzica" autocomplete="off" />
+          <button class="primary">Odblokuj</button>
+          <button class="secondary" type="button" data-view="home">Wróć</button>
+        </form>
+      </div>
+      ${toast()}
+    </section>
+  `;
+}
+
+function renderParent() {
+  const pending = state.coupons.filter((coupon) => coupon.status === "pending");
+  return `
+    <section class="parent-shell">
+      <div class="title-block">
+        <h1>Panel rodzica</h1>
+        <p>Nagrody, korekty i dni usprawiedliwione</p>
+      </div>
+      <div class="stack" style="margin-top:24px">
+        ${pending.length ? pending.map(renderParentRequest).join("") : `<div class="parent-card"><h2>Brak próśb</h2><p class="child-meta">Aktualnie żaden kupon nie czeka na akceptację.</p></div>`}
+        <div class="parent-card">
+          <h2>Szybkie akcje</h2>
+          <div class="stack">
+            <button class="primary" data-view="dayAdmin">Dni i usprawiedliwienia</button>
+            <button class="primary" data-view="edit">Zarządzaj obowiązkami</button>
+            <button class="primary" data-view="rewardsAdmin">Zarządzaj nagrodami</button>
+            <button class="secondary" data-view="shop">Podgląd sklepu</button>
+            <button class="secondary" data-view="history">Historia</button>
+          </div>
+        </div>
+      </div>
+      ${toast()}
+    </section>
+  `;
+}
+
+function renderParentRequest(coupon) {
+  const child = childById(coupon.childId);
+  const reward = rewardById(coupon.rewardId);
+  return `
+    <div class="parent-card request-card">
+      <span class="coupon-icon">${icon(reward.icon)}</span>
+      <div>
+        <h2>${child.name}: ${reward.title}</h2>
+        <p class="child-meta">${reward.cost} ${starWord(reward.cost)} · ${formatDateTime(coupon.createdAt)}</p>
+        <span class="status-badge status-pending">Czeka na rodzica</span>
+      </div>
+      <div class="confirm-actions">
+        <button class="secondary" data-reject="${coupon.id}">Odrzuć</button>
+        <button class="primary" data-approve="${coupon.id}">Zatwierdz</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderEdit() {
+  const groups = choreGroups();
+  return `
+    <section class="parent-shell">
+      <button class="back-button" data-view="parent">‹</button>
+      <div class="title-block"><h1>Obowiązki</h1><p>Jedna lista, przypisanie dzieci, dni tygodnia i kolejność na kartach.</p></div>
+      <div class="chore-admin-layout">
+        <div class="parent-card form-card">
+          <h2>Dodaj obowiązek</h2>
+          <form class="stack" data-edit-form>
+            <input name="label" required placeholder="Nazwa obowiązku" />
+            <select name="period">${periods().map((period) => `<option value="${period.id}">${period.title}</option>`).join("")}</select>
+            <div class="child-picker">${Object.values(state.children).map((child) => `<label><input type="checkbox" name="children" value="${child.id}" checked /> ${child.name}</label>`).join("")}</div>
+            ${renderDayCheckboxes(weekDays())}
+            <button class="primary">Dodaj</button>
+          </form>
+        </div>
+        <div class="parent-card chore-list-card">
+          <div class="admin-list-head">
+            <div>
+              <h2>Lista obowiązków</h2>
+              <p class="child-meta">Kolejność tutaj decyduje o kolejności na kartach dzieci.</p>
+            </div>
+            <span class="status-badge status-used">${groups.length} pozycji</span>
+          </div>
+          <div class="chore-admin-list">
+            ${groups.map((group, index) => renderChoreAdminRow(group, index, groups.length)).join("")}
+          </div>
+        </div>
+      </div>
+      ${toast()}
+    </section>
+  `;
+}
+
+function renderChoreAdminRow(group, index, total) {
+  return `
+    <div class="chore-admin-row" data-chore-row="${group.id}">
+      <div class="chore-order-tools">
+        <button class="ghost icon-action" data-move-chore="${group.id}" data-direction="-1" ${index === 0 ? "disabled" : ""} aria-label="Przesuń wyżej">↑</button>
+        <button class="ghost icon-action" data-move-chore="${group.id}" data-direction="1" ${index === total - 1 ? "disabled" : ""} aria-label="Przesuń niżej">↓</button>
+      </div>
+      <div class="chore-admin-main">
+        <div class="chore-row-top">
+          <input value="${group.label}" data-chore-label="${group.id}" />
+          <select data-chore-period="${group.id}">
+            ${periods().map((period) => `<option value="${period.id}" ${period.id === group.periodId ? "selected" : ""}>${period.title}</option>`).join("")}
+          </select>
+        </div>
+        <div class="chore-admin-meta">
+          <span class="status-badge status-used">${periodById(group.periodId).title}</span>
+          <span class="child-meta">${daysLabel(group.days)}</span>
+        </div>
+        <div class="child-picker chore-child-picker">
+          ${Object.values(state.children).map((child) => `<label><input type="checkbox" data-chore-child="${group.id}" value="${child.id}" ${group.childIds.includes(child.id) ? "checked" : ""} /> ${child.name}</label>`).join("")}
+        </div>
+        ${renderChoreDayCheckboxes(group)}
+      </div>
+      <div class="chore-row-actions">
+        <button class="primary" data-save-chore-group="${group.id}">Zapisz</button>
+        <button class="danger" data-delete-chore-group="${group.id}">Usuń</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderRewardsAdmin() {
+  return `
+    <section class="parent-shell reward-admin-shell">
+      <button class="back-button" data-view="parent">‹</button>
+      <div class="title-block"><h1>Nagrody</h1><p>Dodawaj nagrody i wybieraj dzieci, których dotyczą</p></div>
+      <div class="reward-admin-layout">
+        <div class="parent-card reward-create-card">
+          <h2>Dodaj nagrodę</h2>
+          <p class="child-meta">Nowa pozycja pojawi się w sklepie wybranych dzieci.</p>
+          <form class="stack" data-reward-form>
+            <div class="field"><label>Nazwa</label><input name="title" required placeholder="Nazwa nagrody" /></div>
+            <div class="reward-form-grid">
+              <div class="field"><label>Koszt</label><input name="cost" required type="number" min="1" value="1" /></div>
+              <div class="field"><label>Typ</label>${renderRewardIconSelect("icon")}</div>
+            </div>
+            <div class="child-picker">${Object.values(state.children).map((child) => `<label><input type="checkbox" name="children" value="${child.id}" checked /> ${child.name}</label>`).join("")}</div>
+            <button class="primary">Dodaj nagrodę</button>
+          </form>
+        </div>
+        <div class="parent-card reward-list-card">
+          <div class="admin-list-head">
+            <div><h2>Lista nagród</h2><p class="child-meta">Edytuj cenę, nazwę i dostępność dla dzieci.</p></div>
+            <span class="status-badge">${state.rewards.length} pozycji</span>
+          </div>
+          <div class="reward-admin-list">${state.rewards.map(renderRewardAdminRow).join("")}</div>
+        </div>
+      </div>
+      ${toast()}
+    </section>
+  `;
+}
+
+function renderRewardIconSelect(name, selected = "play", dataAttr = "") {
+  const options = [
+    ["play", "Bajka"],
+    ["pad", "Granie"],
+    ["calendar", "Weekend"],
+    ["compass", "Wyprawa"],
+  ];
+  return `<select name="${name}" ${dataAttr}>${options.map(([value, label]) => `<option value="${value}" ${value === selected ? "selected" : ""}>${label}</option>`).join("")}</select>`;
+}
+
+function renderRewardAdminRow(reward) {
+  return `
+    <div class="reward-admin-row">
+      <span class="coupon-icon">${icon(reward.icon)}</span>
+      <div class="reward-admin-main">
+        <div class="reward-row-top">
+          <div class="field compact-field"><label>Nazwa</label><input data-reward-title="${reward.id}" value="${reward.title}" aria-label="Nazwa nagrody" /></div>
+          <div class="field compact-field"><label>Koszt</label><input data-reward-cost="${reward.id}" type="number" min="1" value="${reward.cost}" aria-label="Koszt nagrody" /></div>
+          <div class="field compact-field"><label>Typ</label>${renderRewardIconSelect("reward-icon", reward.icon, `data-reward-icon="${reward.id}" aria-label="Typ nagrody"`)}</div>
+        </div>
+        <div class="reward-admin-meta">
+          <span class="status-badge">${reward.cost} ${starWord(reward.cost)}</span>
+          <div class="child-picker reward-child-picker">${Object.values(state.children).map((child) => `<label><input type="checkbox" data-reward-child="${reward.id}" value="${child.id}" ${rewardAppliesToChild(reward, child.id) ? "checked" : ""} /> ${child.name}</label>`).join("")}</div>
+        </div>
+      </div>
+      <div class="reward-row-actions">
+        <button class="primary" data-save-reward-children="${reward.id}">Zapisz</button>
+        <button class="danger" data-delete-reward="${reward.id}">Usuń</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderDayAdmin() {
+  const overrides = Object.entries(state.dayOverrides || {}).sort(([a], [b]) => a.localeCompare(b));
+  const vacations = [...(state.vacationRanges || [])].sort((a, b) => a.start.localeCompare(b.start));
+  return `
+    <section class="parent-shell">
+      <button class="back-button" data-view="parent">‹</button>
+      <div class="title-block"><h1>Dni i wolne od szkoły</h1><p>Weekend rozpoznaje system. Święta, egzaminy, dni dyrektorskie i wakacje dodaje rodzic.</p></div>
+      <div class="day-admin-layout">
+        <div class="parent-card">
+          <h2>Kalendarz szkoły</h2>
+          <p class="child-meta">Dzisiaj: ${dayName()}, ${systemDayTypeLabel()}</p>
+          <form class="stack" data-school-day-form>
+            <input name="date" type="date" value="${dateKey()}" />
+            <input name="note" placeholder="Powód, np. święto, egzamin, dzień dyrektorski" />
+            <button class="primary">Oznacz jako dzień wolny od szkoły</button>
+          </form>
+          <p class="hint">Dzień wolny w tygodniu korzysta z obowiązków ustawionych na weekend/dni wolne.</p>
+        </div>
+        <div class="parent-card">
+          <h2>Tryb wakacji</h2>
+          <p class="child-meta">W dni robocze wakacji można ustawić osobne obowiązki.</p>
+          <form class="stack" data-vacation-form>
+            <div class="vacation-date-grid">
+              <div class="field"><label>Od</label><input name="start" type="date" value="${dateKey()}" /></div>
+              <div class="field"><label>Do</label><input name="end" type="date" value="${dateKey()}" /></div>
+            </div>
+            <input name="note" placeholder="Nazwa, np. wakacje letnie" />
+            <button class="primary">Dodaj okres wakacji</button>
+          </form>
+          <p class="hint">W weekend wakacyjny nadal działają obowiązki weekendowe. Osobny tryb dotyczy poniedziałku-piątku.</p>
+        </div>
+        <div class="parent-card">
+          <h2>Zapisane wyjątki</h2>
+          <div class="school-free-list">
+            ${overrides.length ? overrides.map(([key, item]) => `
+              <div class="school-free-row">
+                <div>
+                  <strong>${formatDateLabel(key)}</strong>
+                  <small>${item.note || "dzień wolny od szkoły"}</small>
+                </div>
+                <button class="ghost" data-delete-school-day="${key}">Usuń</button>
+              </div>
+            `).join("") : `<div class="empty-row">Brak ręcznie oznaczonych dni wolnych.</div>`}
+          </div>
+        </div>
+        <div class="parent-card">
+          <h2>Okresy wakacji</h2>
+          <div class="school-free-list">
+            ${vacations.length ? vacations.map((range) => `
+              <div class="school-free-row">
+                <div>
+                  <strong>${formatDateLabel(range.start)} - ${formatDateLabel(range.end)}</strong>
+                  <small>${range.note || "wakacje"}</small>
+                </div>
+                <button class="ghost" data-delete-vacation="${range.id}">Usuń</button>
+              </div>
+            `).join("") : `<div class="empty-row">Brak zapisanych okresów wakacji.</div>`}
+          </div>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-top:24px">
+        ${Object.values(state.children).map((child) => `
+          <div class="parent-card">
+            <h2>${child.name}</h2>
+            <p class="child-meta">Dzisiaj: ${dayName()}, ${childDayLabel(child)}</p>
+            <button class="${isExcused(child) ? "danger" : "primary"}" data-toggle-excuse="${child.id}">
+              ${isExcused(child) ? "Cofnij usprawiedliwienie" : "Usprawiedliw dzień"}
+            </button>
+          </div>
+        `).join("")}
+      </div>
+      ${toast()}
+    </section>
+  `;
+}
+
+function renderHistory() {
+  return `
+    <section class="parent-shell">
+      <button class="back-button" data-view="parent">‹</button>
+      <div class="title-block"><h1>Historia</h1><p>Daty, godziny i decyzje rodzica</p></div>
+      <div class="stack" style="margin-top:24px">
+        ${state.history.length ? state.history.map((entry) => `
+          <div class="parent-card">
+            <h2>${entry.title}</h2>
+            <p class="child-meta">${formatDateTime(entry.happenedAt)}</p>
+            <p>${entry.note}</p>
+          </div>
+        `).join("") : `<div class="parent-card"><h2>Brak historii</h2><p class="child-meta">Akcje pojawią się po odbiórze kuponów lub decyzjach rodzica.</p></div>`}
+      </div>
+      ${toast()}
+    </section>
+  `;
+}
+
+function renderDayCheckboxes(selectedDays = weekDays()) {
+  const selected = new Set(selectedDays);
+  return `
+    <div class="day-pills">
+      <div class="day-pills-main">
+        ${allWeekDays().filter((day) => day !== 7).map((day) => `
+          <label class="day-pill">
+            <input type="checkbox" name="days" value="${day}" ${selected.has(day) ? "checked" : ""} />
+            <span>${dayShortName(day)}</span>
+          </label>
+        `).join("")}
+      </div>
+      <div class="vacation-pill-row">
+        <label class="day-pill vacation-day-pill">
+          <input type="checkbox" name="days" value="7" ${selected.has(7) ? "checked" : ""} />
+          <span>Wakacje</span>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function renderChoreDayCheckboxes(group) {
+  const selected = new Set(group.days || weekDays());
+  return `
+    <div class="day-pills chore-day-pills">
+      <div class="day-pills-main">
+        ${allWeekDays().filter((day) => day !== 7).map((day) => `
+          <label class="day-pill">
+            <input type="checkbox" value="${day}" data-chore-day="${group.id}" ${selected.has(day) ? "checked" : ""} />
+            <span>${dayShortName(day)}</span>
+          </label>
+        `).join("")}
+      </div>
+      <div class="vacation-pill-row">
+        <label class="day-pill vacation-day-pill">
+          <input type="checkbox" value="7" data-chore-day="${group.id}" ${selected.has(7) ? "checked" : ""} />
+          <span>Wakacje</span>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function toast() {
+  return state.toast ? `<div class="toast">${state.toast}</div>` : "";
+}
+
+function formatDateTime(value) {
+  return new Intl.DateTimeFormat("pl-PL", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatDateLabel(key) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(year, month - 1, day));
+}
+
+function bindEvents() {
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    button.addEventListener("click", () => setView(button.dataset.view));
+  });
+  document.querySelectorAll("[data-card-child], [data-child]").forEach((card) => {
+    card.addEventListener("click", () => setView("child", card.dataset.cardChild || card.dataset.child));
+  });
+  document.querySelectorAll("[data-task]").forEach((button) => {
+    button.addEventListener("click", () => toggleTask(button.dataset.period, button.dataset.task));
+  });
+  document.querySelectorAll("[data-reward]").forEach((button) => {
+    button.addEventListener("click", () => requestReward(button.dataset.reward));
+  });
+  document.querySelectorAll("[data-coupon]").forEach((button) => {
+    button.addEventListener("click", () => handleCoupon(button.dataset.coupon));
+  });
+  document.querySelectorAll("[data-approve]").forEach((button) => {
+    button.addEventListener("click", () => approveCoupon(button.dataset.approve));
+  });
+  document.querySelectorAll("[data-reject]").forEach((button) => {
+    button.addEventListener("click", () => rejectCoupon(button.dataset.reject));
+  });
+  document.querySelectorAll("[data-confirm-redeem]").forEach((button) => {
+    button.addEventListener("click", () => redeemCoupon(button.dataset.confirmRedeem));
+  });
+  document.querySelector("[data-cancel-redeem]")?.addEventListener("click", () => {
+    redeemConfirmId = "";
+    render();
+  });
+  document.querySelector("[data-parent-login]")?.addEventListener("submit", unlockParent);
+  document.querySelector("[data-edit-form]")?.addEventListener("submit", saveChore);
+  document.querySelector("[data-reward-form]")?.addEventListener("submit", saveReward);
+  document.querySelector("[data-parent-lock]")?.addEventListener("click", () => {
+    parentUnlocked = false;
+    setView("home");
+    showToast("Panel rodzica zablokowany");
+  });
+  document.querySelectorAll("[data-save-chore-group]").forEach((button) => {
+    button.addEventListener("click", () => saveChoreGroup(button.dataset.saveChoreGroup));
+  });
+  document.querySelectorAll("[data-delete-chore-group]").forEach((button) => {
+    button.addEventListener("click", () => deleteChoreGroup(button.dataset.deleteChoreGroup));
+  });
+  document.querySelectorAll("[data-move-chore]").forEach((button) => {
+    button.addEventListener("click", () => moveChoreGroup(button.dataset.moveChore, Number(button.dataset.direction)));
+  });
+  document.querySelectorAll("[data-delete-reward]").forEach((button) => {
+    button.addEventListener("click", () => deleteReward(button.dataset.deleteReward));
+  });
+  document.querySelectorAll("[data-save-reward-children]").forEach((button) => {
+    button.addEventListener("click", () => saveRewardChildren(button.dataset.saveRewardChildren));
+  });
+  document.querySelectorAll("[data-toggle-excuse]").forEach((button) => {
+    button.addEventListener("click", () => toggleExcuse(button.dataset.toggleExcuse));
+  });
+  document.querySelector("[data-school-day-form]")?.addEventListener("submit", saveSchoolDayOverride);
+  document.querySelector("[data-vacation-form]")?.addEventListener("submit", saveVacationRange);
+  document.querySelectorAll("[data-delete-school-day]").forEach((button) => {
+    button.addEventListener("click", () => deleteSchoolDayOverride(button.dataset.deleteSchoolDay));
+  });
+  document.querySelectorAll("[data-delete-vacation]").forEach((button) => {
+    button.addEventListener("click", () => deleteVacationRange(button.dataset.deleteVacation));
+  });
+  document.querySelector("[data-reset]")?.addEventListener("click", () => {
+    localStorage.removeItem(STORE_KEY);
+    state = structuredClone(initialState);
+    state.view = isParentModule ? "parent" : "home";
+    redeemConfirmId = "";
+    parentUnlocked = isParentModule;
+    showToast("Prototyp zresetowany");
+  });
+}
+
+function unlockParent(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  if (String(data.get("pin") || "").trim() !== "1234") {
+    showToast("Nieprawidłowy PIN");
+    return;
+  }
+  parentUnlocked = true;
+  state.view = parentTargetView || "parent";
+  showToast("Panel rodzica odblokowany");
+}
+
+function toggleTask(period, taskId) {
+  const child = activeChild();
+  const task = child.tasks[period].find((item) => item.id === taskId);
+  if (!task) return;
+  task.done = !task.done;
+  const stats = taskStats(child);
+  if (stats.remaining === 0 && !child.starAwardedToday && stats.total > 0) {
+    child.stars += 1;
+    child.starAwardedToday = true;
+    showToast(`${child.name} zdobywa gwiazdkę za cały dzień`);
+    return;
+  }
+  if (stats.remaining > 0 && child.starAwardedToday) {
+    child.stars = Math.max(0, child.stars - 1);
+    child.starAwardedToday = false;
+    showToast("Gwiazdka cofnięta, bo dzień nie jest już kompletny");
+    return;
+  }
+  render();
+}
+
+function requestReward(rewardId) {
+  const child = activeChild();
+  const reward = rewardById(rewardId);
+  if (!rewardAppliesToChild(reward, child.id)) return showToast("Ta nagroda nie jest dostępna dla tego dziecka");
+  if (child.stars < reward.cost) return showToast("Za mało gwiazdek na te nagrodę");
+  const existing = state.coupons.find((coupon) => coupon.childId === child.id && coupon.rewardId === reward.id && coupon.status !== "used");
+  if (existing) return showToast("Taki kupon jest już w szufladzie");
+  state.coupons.push({ id: `coupon-${Date.now()}`, childId: child.id, rewardId: reward.id, status: "pending", createdAt: Date.now() });
+  showToast("Kupon czeka na akceptację rodzica");
+}
+
+function approveCoupon(couponId) {
+  const coupon = state.coupons.find((item) => item.id === couponId);
+  if (!coupon || coupon.status !== "pending") return;
+  const child = childById(coupon.childId);
+  const reward = rewardById(coupon.rewardId);
+  if (child.stars < reward.cost) return showToast("Saldo dziecka jest już za niskie");
+  child.stars -= reward.cost;
+  coupon.status = "ready";
+  state.activeChildId = child.id;
+  state.view = "shop";
+  showToast("Rodzic zatwierdził kupon");
+}
+
+function rejectCoupon(couponId) {
+  const coupon = state.coupons.find((item) => item.id === couponId);
+  if (!coupon) return;
+  state.history.unshift({
+    title: "Nagroda odrzucona",
+    note: `${childById(coupon.childId).name}: ${rewardById(coupon.rewardId).title}`,
+    happenedAt: Date.now(),
+  });
+  state.coupons = state.coupons.filter((item) => item.id !== couponId);
+  showToast("Prośba została odrzucona");
+}
+
+function handleCoupon(couponId) {
+  const coupon = state.coupons.find((item) => item.id === couponId);
+  if (!coupon) return;
+  if (coupon.status === "pending") {
+    state.view = "parent";
+    showToast("Kupon czeka na rodzica");
+    return;
+  }
+  if (coupon.status === "ready") {
+    redeemConfirmId = coupon.id;
+    render();
+  }
+}
+
+function redeemCoupon(couponId) {
+  const coupon = state.coupons.find((item) => item.id === couponId);
+  if (!coupon || coupon.status !== "ready") return;
+  const reward = rewardById(coupon.rewardId);
+  const child = childById(coupon.childId);
+  coupon.status = "used";
+  state.history.unshift({
+    title: "Kupon odebrany",
+    note: `${child.name}: ${reward.title}`,
+    happenedAt: Date.now(),
+  });
+  redeemConfirmId = "";
+  showToast("Kupon wykorzystany");
+}
+
+function saveChore(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const label = String(data.get("label") || "").trim();
+  const period = String(data.get("period") || "morning");
+  const childIds = data.getAll("children");
+  const days = data.getAll("days").map(Number);
+  if (!label || !childIds.length || !days.length) return showToast("Uzupełnij nazwę, dzieci i dni");
+  const groupId = `chore-${Date.now()}-${slugify(label)}`;
+  const order = nextChoreOrder();
+  childIds.forEach((childId) => {
+    const child = childById(childId);
+    child.tasks[period].push({ id: `${childId}-${period}-${Date.now()}-${Math.random().toString(16).slice(2)}`, groupId, order, label, done: false, days });
+  });
+  showToast("Obowiązek dodany");
+}
+
+function saveReward(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const title = String(data.get("title") || "").trim();
+  const cost = Math.max(1, Number(data.get("cost") || 1));
+  const childIds = data.getAll("children");
+  if (!title || !childIds.length) return showToast("Uzupełnij nazwę i dzieci");
+  state.rewards.push({
+    id: `reward-${Date.now()}`,
+    title,
+    cost,
+    icon: String(data.get("icon") || "play"),
+    color: "#315aa8",
+    childIds,
+  });
+  showToast("Nagroda dodana");
+}
+
+function saveChoreGroup(groupId) {
+  const label = String(document.querySelector(`[data-chore-label="${groupId}"]`)?.value || "").trim();
+  const period = String(document.querySelector(`[data-chore-period="${groupId}"]`)?.value || "morning");
+  const childIds = Array.from(document.querySelectorAll(`[data-chore-child="${groupId}"]:checked`)).map((input) => input.value);
+  const days = Array.from(document.querySelectorAll(`[data-chore-day="${groupId}"]:checked`)).map((input) => Number(input.value));
+  const current = choreGroups().find((group) => group.id === groupId);
+  if (!label || !childIds.length || !days.length || !current) return showToast("Uzupełnij nazwę, dzieci i dni");
+
+  Object.values(state.children).forEach((child) => {
+    const existing = findTaskByGroup(child, groupId);
+    if (!childIds.includes(child.id)) {
+      removeTaskByGroup(child, groupId);
+      return;
+    }
+    if (existing) {
+      removeTaskByGroup(child, groupId);
+      child.tasks[period].push({ ...existing.task, label, days, order: current.order, groupId });
+      return;
+    }
+    child.tasks[period].push({
+      id: `${child.id}-${period}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      groupId,
+      order: current.order,
+      label,
+      done: false,
+      days,
+    });
+  });
+  sortTasksByOrder();
+  showToast("Obowiązek zapisany");
+}
+
+function deleteChoreGroup(groupId) {
+  Object.values(state.children).forEach((child) => removeTaskByGroup(child, groupId));
+  showToast("Obowiązek usunięty");
+}
+
+function moveChoreGroup(groupId, direction) {
+  const groups = choreGroups();
+  const index = groups.findIndex((group) => group.id === groupId);
+  const next = index + direction;
+  if (index < 0 || next < 0 || next >= groups.length) return;
+  const currentOrder = groups[index].order;
+  setChoreOrder(groups[index].id, groups[next].order);
+  setChoreOrder(groups[next].id, currentOrder);
+  sortTasksByOrder();
+  showToast("Kolejność zmieniona");
+}
+
+function setChoreOrder(groupId, order) {
+  Object.values(state.children).forEach((child) => {
+    Object.values(child.tasks).flat().forEach((task) => {
+      if (task.groupId === groupId) task.order = order;
+    });
+  });
+}
+
+function sortTasksByOrder() {
+  Object.values(state.children).forEach((child) => {
+    Object.keys(child.tasks).forEach((periodId) => {
+      child.tasks[periodId].sort((a, b) => (a.order || 0) - (b.order || 0));
+    });
+  });
+}
+
+function deleteReward(rewardId) {
+  state.rewards = state.rewards.filter((reward) => reward.id !== rewardId);
+  state.coupons = state.coupons.filter((coupon) => coupon.rewardId !== rewardId);
+  showToast("Nagroda usunięta");
+}
+
+function saveRewardChildren(rewardId) {
+  const reward = rewardById(rewardId);
+  const title = String(document.querySelector(`[data-reward-title="${rewardId}"]`)?.value || "").trim();
+  const cost = Math.max(1, Number(document.querySelector(`[data-reward-cost="${rewardId}"]`)?.value || 1));
+  const iconName = String(document.querySelector(`[data-reward-icon="${rewardId}"]`)?.value || reward.icon || "play");
+  if (!title) return showToast("Uzupełnij nazwę nagrody");
+  reward.title = title;
+  reward.cost = cost;
+  reward.icon = iconName;
+  reward.childIds = Array.from(document.querySelectorAll(`[data-reward-child="${rewardId}"]:checked`)).map((input) => input.value);
+  if (!reward.childIds.length) reward.childIds = Object.keys(state.children);
+  showToast("Nagroda zapisana");
+}
+
+function toggleExcuse(childId) {
+  const key = excuseKey(childId);
+  if (state.dayExcuses[key]) delete state.dayExcuses[key];
+  else state.dayExcuses[key] = { childId, date: dateKey(), createdAt: Date.now() };
+  showToast(state.dayExcuses[key] ? "Dzień usprawiedliwiony" : "Usprawiedliwienie cofnięte");
+}
+
+function saveSchoolDayOverride(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const key = String(data.get("date") || "").trim();
+  const note = String(data.get("note") || "").trim();
+  if (!key) return showToast("Wybierz datę");
+  state.dayOverrides[key] = {
+    type: "schoolFree",
+    note,
+    createdAt: Date.now(),
+  };
+  showToast("Dzień wolny od szkoły zapisany");
+}
+
+function deleteSchoolDayOverride(key) {
+  delete state.dayOverrides[key];
+  showToast("Wyjątek szkolny usunięty");
+}
+
+function saveVacationRange(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const start = String(data.get("start") || "").trim();
+  const end = String(data.get("end") || "").trim();
+  const note = String(data.get("note") || "").trim();
+  if (!start || !end) return showToast("Wybierz datę początku i końca");
+  if (end < start) return showToast("Data końca musi być po dacie początku");
+  state.vacationRanges.push({
+    id: `vacation-${Date.now()}`,
+    start,
+    end,
+    note,
+    createdAt: Date.now(),
+  });
+  showToast("Okres wakacji zapisany");
+}
+
+function deleteVacationRange(rangeId) {
+  state.vacationRanges = (state.vacationRanges || []).filter((range) => range.id !== rangeId);
+  showToast("Okres wakacji usunięty");
+}
+
+render();
