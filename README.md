@@ -25,6 +25,15 @@ Repozytorium zawiera też drugi, lekki add-on:
 
 Ten drugi add-on nie przechowuje danych. Służy wyłącznie jako wygodne wejście dla rodzica w aplikacji mobilnej Home Assistant.
 
+## Wersjonowanie
+
+Repozytorium zawiera dwie osobno wersjonowane aplikacje:
+
+- `family_reward_planner` - główna aplikacja z ekranem dziecka, sklepem, panelem rodzica i danymi.
+- `family_reward_planner_parent` - lekki skrót menu Home Assistant do panelu rodzica.
+
+Każda aplikacja ma własny `config.yaml` oraz własny `CHANGELOG.md`. Podbijamy wersję tylko tej aplikacji, której kod lub zachowanie faktycznie zmieniamy.
+
 ## Dane
 
 Stan aplikacji jest zapisywany lokalnie w:
@@ -86,13 +95,15 @@ https://github.com/qlphone-ops/family-reward-planner-ha
 
 Aktualizacje również wykonujemy z interfejsu Home Assistant:
 
-1. Podbijamy `version` w `family_reward_planner/config.yaml`.
+1. Podbijamy `version` w `config.yaml` tej aplikacji, którą zmieniamy.
 
-2. Wgrywamy nową wersję do GitHuba.
+2. Dopisujemy wpis do odpowiedniego `CHANGELOG.md`.
 
-3. W Home Assistant odświeżamy repozytorium aplikacji/dodatków.
+3. Wgrywamy nową wersję do GitHuba.
 
-4. Jeśli pojawi się aktualizacja `Domowy Planner Nagród`, klikamy aktualizację z poziomu UI.
+4. W Home Assistant odświeżamy repozytorium aplikacji/dodatków.
+
+5. Jeśli pojawi się aktualizacja `Domowy Planner Nagród` albo `Planner Nagród - Rodzic`, klikamy aktualizację z poziomu UI.
 
 Nie zakładamy używania terminala HA do instalacji ani aktualizacji. Terminal zostaje tylko jako awaryjne narzędzie diagnostyczne, np. gdy trzeba sprawdzić szczegółowe logi.
 

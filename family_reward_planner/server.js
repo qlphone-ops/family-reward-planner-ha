@@ -180,7 +180,8 @@ async function handle(req, res) {
     return json(res, 405, { error: "method_not_allowed" });
   }
 
-  if (pathname === "/" || pathname === "/child") return serveIndex(req, res, "child", appOptions);
+  const requestedModule = url.searchParams.get("module") === "parent" ? "parent" : "child";
+  if (pathname === "/" || pathname === "/child") return serveIndex(req, res, requestedModule, appOptions);
   if (pathname === "/parent") return serveIndex(req, res, "parent", appOptions);
 
   return serveStatic(req, res, pathname);

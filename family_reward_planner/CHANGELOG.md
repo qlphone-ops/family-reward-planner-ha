@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- Usunięto dzieci wpisane na sztywno w kodzie. Rodzic może teraz dodawać dowolną liczbę dzieci.
+- Dodano panel zarządzania dziećmi z wyborem stylu karty: chłopiec albo dziewczynka.
+- Dodano historię na karcie dziecka: wykonane/cofnięte obowiązki, przyznane gwiazdki oraz zamówione, zatwierdzone i odebrane nagrody.
+- Poprawiono wejście do modułu rodzica przez osobny skrót w Home Assistant z zachowaniem kontroli `parent_users`.
+- Uszczelniono sklep nagród dla sytuacji, gdy rodzic usunie wszystkie nagrody.
+
 ## 0.1.8
 
 - Usunięto reset prototypu z ekranu głównego i kodu aplikacji.

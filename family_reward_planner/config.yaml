@@ -1,5 +1,5 @@
 name: Domowy Planner Nagród
-version: "0.1.8"
+version: "0.2.0"
 slug: family_reward_planner
 description: Planner obowiązków, gwiazdek, kuponów i nagród dla dzieci.
 arch:
