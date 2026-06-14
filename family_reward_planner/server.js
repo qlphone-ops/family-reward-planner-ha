@@ -100,6 +100,28 @@ async function serveIndex(req, res, moduleName, appOptions) {
   res.end(html.replace("</head>", `${bootstrap}</head>`));
 }
 
+function ingressPrefix(pathname) {
+  const firstSegment = pathname.split("/").filter(Boolean)[0] || "";
+  if (firstSegment === "family_reward_planner") return `/${firstSegment}`;
+  if (firstSegment.endsWith("_family_reward_planner")) return `/${firstSegment}`;
+  return "";
+}
+
+function stripIngressPrefix(pathname) {
+  const prefix = ingressPrefix(pathname);
+  if (!prefix) return pathname;
+  const stripped = pathname.slice(prefix.length);
+  return stripped || "/";
+}
+
+function redirect(res, location) {
+  res.writeHead(302, {
+    location,
+    "cache-control": "no-store",
+  });
+  res.end();
+}
+
 async function serveStatic(req, res, pathname) {
   const cleaned = pathname.replace(/^\/+/, "") || "index.html";
   const filePath = path.normalize(path.join(ROOT, cleaned));
@@ -120,7 +142,12 @@ async function serveStatic(req, res, pathname) {
 async function handle(req, res) {
   const appOptions = await options();
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-  const pathname = url.pathname.replace(/\/+$/, "") || "/";
+  const prefix = ingressPrefix(url.pathname);
+  if (prefix && url.pathname === prefix) {
+    const query = url.search || "";
+    return redirect(res, `${prefix}/${query}`);
+  }
+  const pathname = stripIngressPrefix(url.pathname).replace(/\/+$/, "") || "/";
 
   if (pathname === "/healthz") return json(res, 200, { ok: true });
   if (pathname === "/api/options") return json(res, 200, appOptions);
@@ -140,7 +167,7 @@ async function handle(req, res) {
   if (pathname === "/" || pathname === "/child") return serveIndex(req, res, "child", appOptions);
   if (pathname === "/parent") return serveIndex(req, res, "parent", appOptions);
 
-  return serveStatic(req, res, url.pathname);
+  return serveStatic(req, res, pathname);
 }
 
 const server = http.createServer((req, res) => {
