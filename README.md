@@ -61,7 +61,11 @@ Docelowo aplikację instalujemy z repozytorium GitHub, a nie przez ręczne kopio
 
 3. Otwórz listę repozytoriów dodatków/aplikacji.
 
-4. Dodaj adres repozytorium GitHub z aplikacją `Domowy Planner Nagród`.
+4. Dodaj adres repozytorium GitHub:
+
+```text
+https://github.com/qlphone-ops/family-reward-planner-ha
+```
 
 5. Odśwież listę dostępnych aplikacji/dodatków.
 
@@ -73,11 +77,13 @@ Docelowo aplikację instalujemy z repozytorium GitHub, a nie przez ręczne kopio
 
 Aktualizacje również wykonujemy z interfejsu Home Assistant:
 
-1. Wgrywamy nową wersję do GitHuba.
+1. Podbijamy `version` w `family_reward_planner/config.yaml`.
 
-2. W Home Assistant odświeżamy repozytorium aplikacji/dodatków.
+2. Wgrywamy nową wersję do GitHuba.
 
-3. Jeśli pojawi się aktualizacja `Domowy Planner Nagród`, klikamy aktualizację z poziomu UI.
+3. W Home Assistant odświeżamy repozytorium aplikacji/dodatków.
+
+4. Jeśli pojawi się aktualizacja `Domowy Planner Nagród`, klikamy aktualizację z poziomu UI.
 
 Nie zakładamy używania terminala HA do instalacji ani aktualizacji. Terminal zostaje tylko jako awaryjne narzędzie diagnostyczne, np. gdy trzeba sprawdzić szczegółowe logi.
 
@@ -90,6 +96,7 @@ Folder add-ona można umieścić w lokalnym repozytorium Home Assistant przez Sa
 ## Lokalny development
 
 ```bash
+cd family_reward_planner
 node server.js
 ```
 
@@ -102,6 +109,7 @@ Adresy:
 Do lokalnego testu danych:
 
 ```bash
+cd family_reward_planner
 PLANNER_DATA_DIR=. node server.js
 ```
 
