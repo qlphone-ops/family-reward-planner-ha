@@ -10,9 +10,8 @@ RUN apk add --no-cache nodejs npm
 WORKDIR /app
 COPY package.json ./
 COPY server.js index.html app.js styles.css ./
-COPY run.sh /run.sh
+COPY rootfs /
 
-RUN chmod a+x /run.sh
+RUN chmod a+x /etc/services.d/family-reward-planner/run
 
 EXPOSE 8099
-CMD ["/run.sh"]
