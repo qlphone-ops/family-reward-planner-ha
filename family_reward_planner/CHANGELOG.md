@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+- Panel rodzica pobiera teraz realną listę kont Home Assistant przez Core WebSocket API (`config/auth/list`) zamiast pokazywać tylko użytkowników, którzy wcześniej otworzyli aplikację.
+- Dostęp do pierwszej konfiguracji rodziców jest ograniczony do administratorów Home Assistant, a po wyborze rodziców panel jest dostępny dla wskazanych kont.
+- Poprawiono responsywność panelu rodzica: desktop korzysta z szerokiego układu, a mobile z pełnej szerokości bez wąskiej ramki.
+
 ## 0.2.2
 
 - Zmieniono nazwę aplikacji w sklepie Home Assistant na `Obowiązki dzieci`.

@@ -32,6 +32,9 @@ let parentUnlocked = isParentModule;
 let parentTargetView = "parent";
 let saveTimer = 0;
 let historyFilterDays = "7";
+let homeAssistantUsers = runtimeWindow.__PLANNER_OPTIONS__?.ha_users || [];
+let homeAssistantUsersError = runtimeWindow.__PLANNER_OPTIONS__?.ha_users_error || "";
+let usersSource = runtimeWindow.__PLANNER_OPTIONS__?.users_source || "";
 let observedUsers = runtimeWindow.__PLANNER_OPTIONS__?.observed_users || [];
 let selectedParentUsers = runtimeWindow.__PLANNER_OPTIONS__?.parent_users || [];
 let currentUser = runtimeWindow.__PLANNER_OPTIONS__?.current_user || null;
@@ -954,12 +957,17 @@ function renderChildAdminRow(child) {
 
 function renderAccessAdmin() {
   const selected = new Set(selectedParentUsers.map((id) => String(id).toLowerCase()));
-  const users = observedUsers.length ? observedUsers : (currentUser ? [currentUser] : []);
+  const users = homeAssistantUsers.length ? homeAssistantUsers : (observedUsers.length ? observedUsers : (currentUser ? [currentUser] : []));
+  const sourceLabel = homeAssistantUsers.length ? "Lista kont Home Assistant" : "Tryb awaryjny";
   return `
     <section class="parent-shell access-admin-shell">
       <button class="back-button" data-view="parent">‹</button>
       <div class="title-block"><h1>Dostęp rodziców</h1><p>Wybierz użytkowników Home Assistant, którzy mogą otwierać panel rodzica.</p></div>
       <div class="parent-card access-card">
+        <div class="access-summary">
+          <span>${sourceLabel}</span>
+          ${homeAssistantUsers.length ? `<strong>${homeAssistantUsers.length} kont</strong>` : `<strong>Brak listy HA</strong>`}
+        </div>
         <form class="stack" data-parent-users-form>
           <div class="access-user-list">
             ${users.length ? users.map((user) => `
@@ -967,14 +975,22 @@ function renderAccessAdmin() {
                 <input type="checkbox" name="parentUsers" value="${user.id}" ${selected.has(String(user.id).toLowerCase()) ? "checked" : ""} />
                 <span>
                   <strong>${user.label || user.id}</strong>
-                  <small>${currentUser?.id === user.id ? "To jest bieżący użytkownik" : `Ostatnio widziany: ${formatDateTime(user.lastSeenAt || Date.now())}`}</small>
+                  <small>
+                    ${[
+                      currentUser?.id === user.id ? "bieżący użytkownik" : "",
+                      user.isOwner ? "właściciel HA" : "",
+                      user.isAdmin ? "administrator HA" : "",
+                      user.username ? `login: ${user.username}` : "",
+                      !homeAssistantUsers.length && user.lastSeenAt ? `ostatnio widziany: ${formatDateTime(user.lastSeenAt)}` : "",
+                    ].filter(Boolean).join(" · ") || "konto Home Assistant"}
+                  </small>
                 </span>
               </label>
-            `).join("") : `<div class="empty-row">Home Assistant nie przekazał jeszcze użytkowników do aplikacji. Otwórz aplikację z konta rodzica i odśwież ten ekran.</div>`}
+            `).join("") : `<div class="empty-row">Nie udało się pobrać listy użytkowników Home Assistant. ${homeAssistantUsersError || "Sprawdź uprawnienie homeassistant_api i odśwież aplikację po aktualizacji."}</div>`}
           </div>
           <button class="primary">Zapisz rodziców</button>
         </form>
-        <p class="hint">Jeśli nie wybierzesz nikogo, panel rodzica pozostaje dostępny dla użytkowników, którzy mają dostęp do tej aplikacji w Home Assistant. Po wybraniu rodziców dostęp będzie ograniczony do zaznaczonych kont.</p>
+        <p class="hint">${homeAssistantUsers.length ? "Pierwszą konfigurację mogą wykonać administratorzy Home Assistant. Po wybraniu rodziców panel pozostaje dostępny dla wskazanych kont oraz administratorów HA jako awaryjne wejście." : `Nie widzę jeszcze listy kont HA. Szczegóły: ${homeAssistantUsersError || usersSource || "brak informacji"}.`}</p>
       </div>
       ${toast()}
     </section>
