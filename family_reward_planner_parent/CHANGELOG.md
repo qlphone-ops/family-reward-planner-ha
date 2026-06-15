@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5
+
+- Zmieniono skrót rodzica z przekierowania na proxy do modułu `/parent` głównej aplikacji.
+- Panel rodzica nie powinien już przeskakiwać na ekran dzieci po kliknięciu w sidebarze Home Assistant.
+- Proxy przekazuje także wywołania `/api/*`, więc panel rodzica działa pod własnym wpisem w menu.
+
 ## 0.1.4
 
 - Naprawiono otwieranie panelu rodzica pod Home Assistant Ingress, gdy Supervisor przekazuje do skrótu ścieżkę `/` albo `//`.

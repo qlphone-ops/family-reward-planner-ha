@@ -1,6 +1,19 @@
 const http = require("node:http");
+const os = require("node:os");
 
 const PORT = Number(process.env.PORT || 8098);
+const MAIN_PORT = Number(process.env.PLANNER_MAIN_PORT || 8099);
+
+const HOP_BY_HOP_HEADERS = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
 
 function firstHeader(req, names) {
   for (const name of names) {
@@ -27,21 +40,7 @@ function safePath(value) {
   return path.replace(/^\/+/, "/") || "/";
 }
 
-function parentTargetFromPath(pathname) {
-  const parts = safePath(pathname).split("/").filter(Boolean);
-  const appIndex = parts[0] === "app" ? 1 : 0;
-  const segment = parts[appIndex] || "";
-
-  if (segment.endsWith("_family_reward_planner_parent")) {
-    const parentPrefix = segment.replace(/_parent$/, "");
-    const prefix = appIndex === 1 ? `/app/${parentPrefix}` : `/${parentPrefix}`;
-    return `${prefix}/?module=parent`;
-  }
-
-  return "";
-}
-
-function parentTarget(req) {
+function parentIngressPrefix(req) {
   const candidates = [
     firstHeader(req, ["x-ingress-path", "x-forwarded-prefix", "x-forwarded-uri"]),
     firstHeader(req, ["referer", "referrer"]),
@@ -49,11 +48,104 @@ function parentTarget(req) {
   ];
 
   for (const candidate of candidates) {
-    const target = parentTargetFromPath(candidate);
-    if (target) return target;
+    const path = safePath(candidate);
+    const parts = path.split("/").filter(Boolean);
+    const appIndex = parts[0] === "app" ? 1 : 0;
+    const segment = parts[appIndex] || "";
+    if (!segment.endsWith("_family_reward_planner_parent")) continue;
+    return {
+      path: `/${parts.slice(0, appIndex + 1).join("/")}`,
+      segment,
+    };
+  }
+
+  return { path: "", segment: "" };
+}
+
+function mainHost(req) {
+  if (process.env.PLANNER_MAIN_HOST) return process.env.PLANNER_MAIN_HOST;
+
+  const { segment } = parentIngressPrefix(req);
+  if (segment) return segment.replace(/_parent$/, "").replaceAll("_", "-");
+
+  const hostname = os.hostname();
+  if (hostname.endsWith("-family-reward-planner-parent")) {
+    return hostname.replace(/-parent$/, "");
   }
 
   return "";
+}
+
+function stripParentPrefix(req, pathname) {
+  const { path: prefix } = parentIngressPrefix(req);
+  if (prefix && pathname === prefix) return "/";
+  if (prefix && pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length) || "/";
+  return pathname;
+}
+
+function requestPathAndSearch(req) {
+  const raw = String(req.url || "/");
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      return { pathname: url.pathname || "/", search: url.search || "" };
+    } catch {
+      return { pathname: "/", search: "" };
+    }
+  }
+
+  const queryIndex = raw.indexOf("?");
+  if (queryIndex === -1) return { pathname: safePath(raw), search: "" };
+  return {
+    pathname: safePath(raw.slice(0, queryIndex)),
+    search: raw.slice(queryIndex),
+  };
+}
+
+function upstreamPath(req) {
+  const parsed = requestPathAndSearch(req);
+  const path = stripParentPrefix(req, parsed.pathname);
+  if (path === "/" || path === "/child") return `/parent${parsed.search}`;
+  return `${path}${parsed.search}`;
+}
+
+function proxyHeaders(req, host) {
+  const headers = {};
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (HOP_BY_HOP_HEADERS.has(name.toLowerCase())) continue;
+    headers[name] = value;
+  }
+  headers.host = `${host}:${MAIN_PORT}`;
+  headers["x-family-reward-parent-shortcut"] = "1";
+  return headers;
+}
+
+function errorPage(res, status, title, message, details = "") {
+  res.writeHead(status, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store",
+  });
+  res.end(`<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#fbf8f1;color:#20252d}
+      main{max-width:560px;padding:32px}
+      p{color:#68707e;font-weight:700;line-height:1.45}
+      code{display:block;margin-top:14px;padding:12px;border-radius:12px;background:#fff;border:1px solid #e4d9c8;white-space:pre-wrap}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${escapeHtml(message)}</p>
+      ${details ? `<code>${escapeHtml(details)}</code>` : ""}
+    </main>
+  </body>
+</html>`);
 }
 
 function escapeHtml(value) {
@@ -64,79 +156,57 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;");
 }
 
-const server = http.createServer((req, res) => {
-  const location = parentTarget(req);
-  if (!location) {
-    const ingressPath = firstHeader(req, ["x-ingress-path", "x-forwarded-prefix", "x-forwarded-uri"]);
-    console.error("Unable to resolve parent panel target", {
-      url: req.url,
-      ingressPath,
-      referer: firstHeader(req, ["referer", "referrer"]),
-    });
-    res.writeHead(500, {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-store",
-    });
-    res.end(`<!doctype html>
-<html lang="pl">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Panel rodzica</title>
-    <style>
-      body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#fbf8f1;color:#20252d}
-      main{max-width:520px;padding:32px}
-      p{color:#68707e;font-weight:700;line-height:1.45}
-      code{display:block;margin-top:14px;padding:12px;border-radius:12px;background:#fff;border:1px solid #e4d9c8;white-space:pre-wrap}
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Nie mogę otworzyć panelu rodzica</h1>
-      <p>Home Assistant nie przekazał ścieżki ingress potrzebnej do odnalezienia głównej aplikacji.</p>
-      <code>X-Ingress-Path: ${escapeHtml(ingressPath || "brak")}</code>
-    </main>
-  </body>
-</html>`);
-    return;
+function proxyToMain(req, res) {
+  const host = mainHost(req);
+  if (!host) {
+    return errorPage(
+      res,
+      500,
+      "Nie mogę otworzyć panelu rodzica",
+      "Nie udało się ustalić nazwy hosta głównej aplikacji.",
+      `url: ${req.url}\nX-Ingress-Path: ${firstHeader(req, ["x-ingress-path"]) || "brak"}\nhostname: ${os.hostname()}`,
+    );
   }
 
-  const html = `<!doctype html>
-<html lang="pl">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Panel rodzica</title>
-    <style>
-      body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#fbf8f1;color:#20252d}
-      main{max-width:420px;padding:32px;text-align:center}
-      a{display:inline-flex;min-height:44px;align-items:center;justify-content:center;margin-top:18px;padding:0 22px;border-radius:22px;background:#315aa8;color:#fff;text-decoration:none;font-weight:800}
-      p{color:#68707e;font-weight:700}
-    </style>
-    <script>
-      const target = ${JSON.stringify(location)};
-      try {
-        window.top.location.replace(target);
-      } catch (error) {
-        window.location.replace(target);
+  const path = upstreamPath(req);
+  const upstream = http.request(
+    {
+      hostname: host,
+      port: MAIN_PORT,
+      path,
+      method: req.method,
+      headers: proxyHeaders(req, host),
+    },
+    (upstreamRes) => {
+      const headers = {};
+      for (const [name, value] of Object.entries(upstreamRes.headers)) {
+        if (HOP_BY_HOP_HEADERS.has(name.toLowerCase())) continue;
+        headers[name] = value;
       }
-    </script>
-  </head>
-  <body>
-    <main>
-      <h1>Otwieram panel rodzica</h1>
-      <p>Jeśli przekierowanie nie nastąpi automatycznie, użyj przycisku poniżej.</p>
-      <a href="${escapeHtml(location)}" target="_top" rel="noreferrer">Przejdź do panelu rodzica</a>
-    </main>
-  </body>
-</html>`;
-  res.writeHead(200, {
-    "content-type": "text/html; charset=utf-8",
-    "cache-control": "no-store",
+      headers["cache-control"] = "no-store";
+      res.writeHead(upstreamRes.statusCode || 502, headers);
+      upstreamRes.pipe(res);
+    },
+  );
+
+  upstream.on("error", (error) => {
+    console.error("Parent panel proxy failed", { host, port: MAIN_PORT, path, error });
+    errorPage(
+      res,
+      502,
+      "Panel rodzica nie jest jeszcze gotowy",
+      "Skrót rodzica nie może połączyć się z główną aplikacją Obowiązki dzieci.",
+      `host: ${host}:${MAIN_PORT}\npath: ${path}\nerror: ${error.message}`,
+    );
   });
-  res.end(html);
+
+  req.pipe(upstream);
+}
+
+const server = http.createServer((req, res) => {
+  proxyToMain(req, res);
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Family Reward Planner parent shortcut listening on ${PORT}`);
+  console.log(`Family Reward Planner parent panel proxy listening on ${PORT}`);
 });
