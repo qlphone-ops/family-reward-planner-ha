@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Naprawiono otwieranie panelu rodzica pod Home Assistant Ingress, gdy Supervisor przekazuje do skrótu ścieżkę `/` albo `//`.
+- Skrót rodzica wylicza adres głównej aplikacji także z nagłówka `X-Ingress-Path`, dzięki czemu nie powinien restartować się na błędzie `ERR_INVALID_URL`.
+
 ## 0.1.3
 
 - Zmieniono nazwę dodatku w sklepie Home Assistant na `Obowiązki dzieci (Panel rodzica)`.
