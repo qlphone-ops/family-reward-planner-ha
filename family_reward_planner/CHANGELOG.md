@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+- Poprawiono trwały zapis danych w Home Assistant: zmiany obowiązków, gwiazdek, kuponów, nagród i historii są zapisywane natychmiast do `/data/planner-state.json`.
+- Zwykłe odświeżenie widoku nie zapisuje już ponownie niezmienionego stanu, co ogranicza ryzyko nadpisania świeżych danych starszym widokiem.
+- Dodano odświeżanie stanu po powrocie do otwartego okna aplikacji, aby panel rodzica widział zamówienia złożone na ekranie dziecka.
+
 ## 0.2.3
 
 - Panel rodzica pobiera teraz realną listę kont Home Assistant przez Core WebSocket API (`config/auth/list`) zamiast pokazywać tylko użytkowników, którzy wcześniej otworzyli aplikację.

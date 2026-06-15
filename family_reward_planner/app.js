@@ -30,7 +30,9 @@ let state = loadState();
 let redeemConfirmId = "";
 let parentUnlocked = isParentModule;
 let parentTargetView = "parent";
-let saveTimer = 0;
+let lastSavedPayload = JSON.stringify(persistedStateFrom(state));
+let lastQueuedPayload = lastSavedPayload;
+let saveQueue = Promise.resolve();
 let historyFilterDays = "7";
 let homeAssistantUsers = runtimeWindow.__PLANNER_OPTIONS__?.ha_users || [];
 let homeAssistantUsersError = runtimeWindow.__PLANNER_OPTIONS__?.ha_users_error || "";
@@ -84,23 +86,38 @@ function loadState() {
 
 function saveState() {
   const payload = JSON.stringify(persistedState());
+  if (payload === lastQueuedPayload) return saveQueue;
+
   if (!runtimeWindow.__PLANNER_API__) {
     localStorage.setItem(STORE_KEY, payload);
-    return;
+    lastSavedPayload = payload;
+    lastQueuedPayload = payload;
+    return Promise.resolve();
   }
-  runtimeWindow.clearTimeout(saveTimer);
-  saveTimer = runtimeWindow.setTimeout(() => {
-    fetch(apiUrl("state"), {
+
+  const payloadToSave = payload;
+  lastQueuedPayload = payloadToSave;
+  saveQueue = saveQueue
+    .catch(() => {})
+    .then(() => fetch(apiUrl("state"), {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: payload,
-    }).catch(() => {
+      body: payloadToSave,
+      keepalive: payloadToSave.length < 60000,
+    }))
+    .then((response) => {
+      if (!response.ok) throw new Error("save failed");
+      lastSavedPayload = payloadToSave;
+    })
+    .catch(() => {
+      if (lastQueuedPayload === payloadToSave) lastQueuedPayload = lastSavedPayload;
       state.toast = "Nie udało się zapisać danych w Home Assistant";
       runtimeWindow.setTimeout(() => {
         if (state.toast === "Nie udało się zapisać danych w Home Assistant") state.toast = "";
       }, 2200);
     });
-  }, 250);
+
+  return saveQueue;
 }
 
 function parentPin() {
@@ -108,8 +125,12 @@ function parentPin() {
 }
 
 function persistedState() {
+  return persistedStateFrom(state);
+}
+
+function persistedStateFrom(source) {
   return {
-    ...state,
+    ...source,
     view: "home",
     toast: "",
   };
@@ -121,6 +142,29 @@ function apiUrl(name) {
     ? pathname.replace(/\/(parent|child)$/, "")
     : pathname.replace(/\/$/, "");
   return `${base || ""}/api/${name}`;
+}
+
+function refreshStateFromServer() {
+  if (!runtimeWindow.__PLANNER_API__ || lastQueuedPayload !== lastSavedPayload) return;
+  fetch(apiUrl("state"))
+    .then((response) => (response.ok ? response.json() : null))
+    .then((payload) => {
+      if (!payload) return;
+      const currentView = state.view;
+      const currentChildId = state.activeChildId;
+      const currentToast = state.toast;
+      const nextState = normalizeState(payload);
+      const nextPayload = JSON.stringify(persistedStateFrom(nextState));
+      if (nextPayload === lastSavedPayload) return;
+      state = nextState;
+      state.view = currentView;
+      state.activeChildId = currentChildId || state.activeChildId;
+      state.toast = currentToast;
+      lastSavedPayload = nextPayload;
+      lastQueuedPayload = nextPayload;
+      render();
+    })
+    .catch(() => {});
 }
 
 function normalizeState(value) {
@@ -1744,6 +1788,13 @@ function saveVacationRange(event) {
 function deleteVacationRange(rangeId) {
   state.vacationRanges = (state.vacationRanges || []).filter((range) => range.id !== rangeId);
   showToast("Okres wakacji usunięty");
+}
+
+if (runtimeWindow.__PLANNER_API__) {
+  runtimeWindow.addEventListener?.("focus", refreshStateFromServer);
+  document.addEventListener?.("visibilitychange", () => {
+    if (!document.hidden) refreshStateFromServer();
+  });
 }
 
 render();
