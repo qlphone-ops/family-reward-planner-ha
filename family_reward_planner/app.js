@@ -31,6 +31,10 @@ let redeemConfirmId = "";
 let parentUnlocked = isParentModule;
 let parentTargetView = "parent";
 let saveTimer = 0;
+let historyFilterDays = "7";
+let observedUsers = runtimeWindow.__PLANNER_OPTIONS__?.observed_users || [];
+let selectedParentUsers = runtimeWindow.__PLANNER_OPTIONS__?.parent_users || [];
+let currentUser = runtimeWindow.__PLANNER_OPTIONS__?.current_user || null;
 const app = document.querySelector("#app");
 
 function childDesign(gender = "boy") {
@@ -62,6 +66,9 @@ function emptyTasks() {
 
 function loadState() {
   try {
+    if (runtimeWindow.__PLANNER_API__) {
+      return normalizeState(structuredClone(runtimeWindow.__PLANNER_STATE__ || initialState));
+    }
     if (runtimeWindow.__PLANNER_STATE__) {
       return normalizeState(structuredClone(runtimeWindow.__PLANNER_STATE__));
     }
@@ -74,8 +81,10 @@ function loadState() {
 
 function saveState() {
   const payload = JSON.stringify(persistedState());
-  localStorage.setItem(STORE_KEY, payload);
-  if (!runtimeWindow.__PLANNER_API__) return;
+  if (!runtimeWindow.__PLANNER_API__) {
+    localStorage.setItem(STORE_KEY, payload);
+    return;
+  }
   runtimeWindow.clearTimeout(saveTimer);
   saveTimer = runtimeWindow.setTimeout(() => {
     fetch(apiUrl("state"), {
@@ -83,7 +92,10 @@ function saveState() {
       headers: { "content-type": "application/json" },
       body: payload,
     }).catch(() => {
-      localStorage.setItem(`${STORE_KEY}-pending-sync`, payload);
+      state.toast = "Nie udało się zapisać danych w Home Assistant";
+      runtimeWindow.setTimeout(() => {
+        if (state.toast === "Nie udało się zapisać danych w Home Assistant") state.toast = "";
+      }, 2200);
     });
   }, 250);
 }
@@ -410,7 +422,7 @@ function setView(view, childId = state.activeChildId) {
 }
 
 function isParentView(view) {
-  return ["parent", "childrenAdmin", "edit", "history", "rewardsAdmin", "dayAdmin"].includes(view);
+  return ["parent", "childrenAdmin", "edit", "rewardsAdmin", "dayAdmin", "accessAdmin"].includes(view);
 }
 
 function showToast(message) {
@@ -438,6 +450,7 @@ function addHistory(childId, title, note, type = "event") {
 }
 
 function render() {
+  if (state.view === "history") state.view = "parent";
   if (!activeChild() && ["child", "shop"].includes(state.view)) {
     state.view = "home";
   }
@@ -455,9 +468,9 @@ function render() {
   if (state.view === "parent") app.innerHTML = parentUnlocked ? renderParent() : renderParentGate();
   if (state.view === "childrenAdmin") app.innerHTML = parentUnlocked ? renderChildrenAdmin() : renderParentGate();
   if (state.view === "edit") app.innerHTML = parentUnlocked ? renderEdit() : renderParentGate();
-  if (state.view === "history") app.innerHTML = parentUnlocked ? renderHistory() : renderParentGate();
   if (state.view === "rewardsAdmin") app.innerHTML = parentUnlocked ? renderRewardsAdmin() : renderParentGate();
   if (state.view === "dayAdmin") app.innerHTML = parentUnlocked ? renderDayAdmin() : renderParentGate();
+  if (state.view === "accessAdmin") app.innerHTML = parentUnlocked ? renderAccessAdmin() : renderParentGate();
   bindEvents();
 }
 
@@ -511,7 +524,7 @@ function renderHome() {
     <section class="screen">
       <div class="topbar">
         <div class="title-block">
-          <h1>Domowy Planner Nagród</h1>
+          <h1>Obowiązki dzieci</h1>
           <p>Wybierz swoją kartę i domknij dzień po swojemu.</p>
         </div>
         <div class="top-actions home-top-actions">
@@ -571,6 +584,16 @@ function renderHomeChildCard(child) {
   `;
 }
 
+function renderChildMenu(active) {
+  return `
+    <nav class="app-menu-bar" aria-label="Nawigacja dziecka">
+      <button class="${active === "child" ? "active" : ""}" data-view="child">Karta</button>
+      <button class="${active === "shop" ? "active" : ""}" data-view="shop">Sklep</button>
+      <button data-view="home">Panel główny</button>
+    </nav>
+  `;
+}
+
 function renderChild(child) {
   const stats = taskStats(child);
   const excused = isExcused(child);
@@ -589,6 +612,7 @@ function renderChild(child) {
         </div>
         ${renderTopBadges(child)}
       </div>
+      ${renderChildMenu("child")}
       <div class="hero-card ${complete ? "hero-card-complete" : ""}" ${styleVars(child)}>
         <div class="avatar"><div class="profile-mark">${child.name.charAt(0)}</div></div>
         <div class="hero-copy">
@@ -620,13 +644,14 @@ function renderChild(child) {
 }
 
 function renderChildHistory(child) {
-  const entries = (state.history || []).filter((entry) => entry.childId === child.id).slice(0, 8);
+  const entries = filteredHistory(child.id, ["task", "star"]);
   return `
     <section class="child-history-panel">
       <div class="section-title child-history-title">
-        <span>Historia ${child.name}</span>
+        <span>Historia obowiązków</span>
         <span class="count-pill">${entries.length}</span>
       </div>
+      ${renderHistoryFilter()}
       <div class="child-history-list">
         ${entries.length ? entries.map((entry) => `
           <div class="child-history-row history-${entry.type || "event"}">
@@ -636,10 +661,57 @@ function renderChildHistory(child) {
               <small>${formatDateTime(entry.happenedAt)} · ${entry.note}</small>
             </span>
           </div>
-        `).join("") : `<div class="empty-row">Historia pojawi się po odznaczeniu obowiązków i użyciu nagród.</div>`}
+        `).join("") : `<div class="empty-row">Historia pojawi się po odznaczeniu obowiązków i zdobyciu gwiazdek.</div>`}
       </div>
     </section>
   `;
+}
+
+function renderRewardHistory(child) {
+  const entries = filteredHistory(child.id, ["reward"]);
+  return `
+    <section class="child-history-panel reward-history-panel">
+      <div class="section-title child-history-title">
+        <span>Historia kuponów</span>
+        <span class="count-pill">${entries.length}</span>
+      </div>
+      ${renderHistoryFilter()}
+      <div class="child-history-list">
+        ${entries.length ? entries.map((entry) => `
+          <div class="child-history-row history-reward">
+            <span class="history-dot">${historyIcon(entry.type)}</span>
+            <span>
+              <strong>${entry.title}</strong>
+              <small>${formatDateTime(entry.happenedAt)} · ${entry.note}</small>
+            </span>
+          </div>
+        `).join("") : `<div class="empty-row">Historia kuponów pojawi się po zamówieniu lub odebraniu nagrody.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderHistoryFilter() {
+  return `
+    <label class="history-filter">
+      <span>Pokaż</span>
+      <select data-history-filter>
+        <option value="1" ${historyFilterDays === "1" ? "selected" : ""}>dzisiaj</option>
+        <option value="7" ${historyFilterDays === "7" ? "selected" : ""}>7 dni</option>
+        <option value="30" ${historyFilterDays === "30" ? "selected" : ""}>30 dni</option>
+        <option value="all" ${historyFilterDays === "all" ? "selected" : ""}>wszystko</option>
+      </select>
+    </label>
+  `;
+}
+
+function filteredHistory(childId, types) {
+  const now = Date.now();
+  const maxAge = historyFilterDays === "all" ? Infinity : Number(historyFilterDays) * 24 * 60 * 60 * 1000;
+  return (state.history || [])
+    .filter((entry) => entry.childId === childId)
+    .filter((entry) => types.includes(entry.type || "event"))
+    .filter((entry) => Number.isFinite(maxAge) ? now - Number(entry.happenedAt || 0) <= maxAge : true);
 }
 
 function historyIcon(type) {
@@ -671,7 +743,7 @@ function renderTaskSection(child, period) {
 }
 
 function renderShop(child) {
-  const coupons = state.coupons.filter((coupon) => coupon.childId === child.id && coupon.status !== "rejected");
+  const coupons = state.coupons.filter((coupon) => coupon.childId === child.id && !["rejected", "used"].includes(coupon.status));
   const rewards = state.rewards.filter((reward) => rewardAppliesToChild(reward, child.id));
   return `
     <section class="screen">
@@ -685,6 +757,7 @@ function renderShop(child) {
           ${renderStarToken(child, "star-token-compact")}
         </div>
       </div>
+      ${renderChildMenu("shop")}
       <div class="shop-grid">
         ${rewards.map((reward) => renderReward(child, reward)).join("")}
       </div>
@@ -698,6 +771,7 @@ function renderShop(child) {
           </div>
         </div>
       </section>
+      ${renderRewardHistory(child)}
       <div class="bottom-strip">
         <span>${bigTripHint(child)}</span>
         <span>
@@ -806,8 +880,8 @@ function renderParent() {
             <button class="primary" data-view="childrenAdmin">Zarządzaj dziećmi</button>
             <button class="primary" data-view="edit">Zarządzaj obowiązkami</button>
             <button class="primary" data-view="rewardsAdmin">Zarządzaj nagrodami</button>
+            <button class="primary" data-view="accessAdmin">Dostęp rodziców</button>
             <button class="secondary" data-view="shop">Podgląd sklepu</button>
-            <button class="secondary" data-view="history">Historia</button>
           </div>
         </div>
       </div>
@@ -875,6 +949,35 @@ function renderChildAdminRow(child) {
         <button class="danger" data-delete-child="${child.id}">Usuń</button>
       </div>
     </div>
+  `;
+}
+
+function renderAccessAdmin() {
+  const selected = new Set(selectedParentUsers.map((id) => String(id).toLowerCase()));
+  const users = observedUsers.length ? observedUsers : (currentUser ? [currentUser] : []);
+  return `
+    <section class="parent-shell access-admin-shell">
+      <button class="back-button" data-view="parent">‹</button>
+      <div class="title-block"><h1>Dostęp rodziców</h1><p>Wybierz użytkowników Home Assistant, którzy mogą otwierać panel rodzica.</p></div>
+      <div class="parent-card access-card">
+        <form class="stack" data-parent-users-form>
+          <div class="access-user-list">
+            ${users.length ? users.map((user) => `
+              <label class="access-user-row">
+                <input type="checkbox" name="parentUsers" value="${user.id}" ${selected.has(String(user.id).toLowerCase()) ? "checked" : ""} />
+                <span>
+                  <strong>${user.label || user.id}</strong>
+                  <small>${currentUser?.id === user.id ? "To jest bieżący użytkownik" : `Ostatnio widziany: ${formatDateTime(user.lastSeenAt || Date.now())}`}</small>
+                </span>
+              </label>
+            `).join("") : `<div class="empty-row">Home Assistant nie przekazał jeszcze użytkowników do aplikacji. Otwórz aplikację z konta rodzica i odśwież ten ekran.</div>`}
+          </div>
+          <button class="primary">Zapisz rodziców</button>
+        </form>
+        <p class="hint">Jeśli nie wybierzesz nikogo, panel rodzica pozostaje dostępny dla użytkowników, którzy mają dostęp do tej aplikacji w Home Assistant. Po wybraniu rodziców dostęp będzie ograniczony do zaznaczonych kont.</p>
+      </div>
+      ${toast()}
+    </section>
   `;
 }
 
@@ -1218,6 +1321,13 @@ function bindEvents() {
   document.querySelectorAll("[data-delete-child]").forEach((button) => {
     button.addEventListener("click", () => deleteChild(button.dataset.deleteChild));
   });
+  document.querySelector("[data-parent-users-form]")?.addEventListener("submit", saveParentUsers);
+  document.querySelectorAll("[data-history-filter]").forEach((select) => {
+    select.addEventListener("change", () => {
+      historyFilterDays = select.value;
+      render();
+    });
+  });
   document.querySelector("[data-edit-form]")?.addEventListener("submit", saveChore);
   document.querySelector("[data-reward-form]")?.addEventListener("submit", saveReward);
   document.querySelector("[data-parent-lock]")?.addEventListener("click", () => {
@@ -1423,6 +1533,31 @@ function deleteChild(childId) {
   });
   if (state.activeChildId === childId) state.activeChildId = Object.keys(state.children)[0] || "";
   showToast(`Usunięto kartę: ${child.name}`);
+}
+
+function saveParentUsers(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const parentUsers = data.getAll("parentUsers").map((id) => String(id).trim().toLowerCase()).filter(Boolean);
+  selectedParentUsers = parentUsers;
+  if (!runtimeWindow.__PLANNER_API__) {
+    showToast("Rodzice zapisani lokalnie");
+    return;
+  }
+  fetch(apiUrl("parents"), {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ parent_users: parentUsers }),
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error("save failed");
+      return response.json();
+    })
+    .then((payload) => {
+      selectedParentUsers = payload.parent_users || parentUsers;
+      showToast("Dostęp rodziców zapisany");
+    })
+    .catch(() => showToast("Nie udało się zapisać rodziców"));
 }
 
 function saveChore(event) {

@@ -119,6 +119,33 @@ button {
   gap: 16px;
 }
 
+.app-menu-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: -10px 0 24px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 24px rgba(26, 31, 43, 0.06);
+}
+
+.app-menu-bar button {
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: 18px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 900;
+}
+
+.app-menu-bar button.active {
+  color: #fff;
+  background: var(--blue);
+  box-shadow: 0 8px 18px rgba(49, 90, 168, 0.18);
+}
+
 .badge {
   display: flex;
   align-items: center;
@@ -1373,12 +1400,36 @@ button {
 }
 
 .child-history-title {
+  margin-bottom: 12px;
+}
+
+.history-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.history-filter select {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 900;
 }
 
 .child-history-list {
   display: grid;
   gap: 10px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
 }
 
 .child-history-row {
@@ -1424,6 +1475,49 @@ button {
 .history-reward .history-dot {
   background: #efe9ff;
   color: #7055ca;
+}
+
+.reward-history-panel {
+  background:
+    linear-gradient(135deg, rgba(242, 237, 255, 0.92), rgba(255, 255, 255, 0.94)),
+    #fff;
+}
+
+.access-card {
+  display: grid;
+  gap: 14px;
+}
+
+.access-user-list {
+  display: grid;
+  gap: 10px;
+}
+
+.access-user-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.access-user-row input {
+  width: 22px;
+  height: 22px;
+}
+
+.access-user-row strong,
+.access-user-row small {
+  display: block;
+}
+
+.access-user-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .stack {
@@ -2325,6 +2419,17 @@ button {
     margin-bottom: 24px;
   }
 
+  .app-menu-bar {
+    display: flex;
+    width: 100%;
+    margin: -8px 0 18px;
+  }
+
+  .app-menu-bar button {
+    flex: 1 1 0;
+    padding: 0 10px;
+  }
+
   .title-block h1 {
     font-size: 42px;
     line-height: 1.05;
@@ -2486,6 +2591,11 @@ button {
 
   .topbar {
     align-items: stretch;
+  }
+
+  .app-menu-bar {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .title-block h1 {

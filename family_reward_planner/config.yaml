@@ -1,5 +1,5 @@
-name: Domowy Planner Nagród
-version: "0.2.0"
+name: Obowiązki dzieci
+version: "0.2.2"
 slug: family_reward_planner
 description: Planner obowiązków, gwiazdek, kuponów i nagród dla dzieci.
 arch:
@@ -12,13 +12,10 @@ ingress: true
 ingress_port: 8099
 ingress_entry: /child
 panel_icon: mdi:star-face
-panel_title: Planner Nagród
+panel_title: Obowiązki dzieci
 options:
-  parent_users: []
-  child_module_title: Domowy Planner Nagród
+  child_module_title: Obowiązki dzieci
   parent_module_title: Panel rodzica
 schema:
-  parent_users:
-    - str
   child_module_title: str
   parent_module_title: str

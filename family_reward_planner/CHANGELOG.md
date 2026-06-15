@@ -1,10 +1,25 @@
 # Changelog
 
+## 0.2.2
+
+- Zmieniono nazwę aplikacji w sklepie Home Assistant na `Obowiązki dzieci`.
+- Zmieniono tytuł w sidebarze Home Assistant na `Obowiązki dzieci`.
+
+## 0.2.1
+
+- Dane aplikacji w Home Assistant są zapisywane wyłącznie po stronie add-ona w `/data/planner-state.json`, aby każdy użytkownik domu widział ten sam stan.
+- Dodano wybór rodziców w panelu aplikacji na podstawie użytkowników Home Assistant widzianych przez add-on.
+- Usunięto ręczne wpisywanie `parent_users` z widocznej konfiguracji add-ona.
+- Rozdzielono historię obowiązków i gwiazdek od historii kuponów. Historia kuponów jest widoczna w sklepie.
+- Dodano filtrowanie historii po dniach oraz przewijane panele historii.
+- Dodano górne menu na karcie dziecka i w sklepie.
+- Poprawiono obsługę wejścia do panelu rodzica przez osobny skrót Home Assistant.
+
 ## 0.2.0
 
 - Usunięto dzieci wpisane na sztywno w kodzie. Rodzic może teraz dodawać dowolną liczbę dzieci.
 - Dodano panel zarządzania dziećmi z wyborem stylu karty: chłopiec albo dziewczynka.
-- Dodano historię na karcie dziecka: wykonane/cofnięte obowiązki, przyznane gwiazdki oraz zamówione, zatwierdzone i odebrane nagrody.
+- Dodano podstawową historię aktywności dzieci.
 - Poprawiono wejście do modułu rodzica przez osobny skrót w Home Assistant z zachowaniem kontroli `parent_users`.
 - Uszczelniono sklep nagród dla sytuacji, gdy rodzic usunie wszystkie nagrody.
 
@@ -12,7 +27,7 @@
 
 - Usunięto reset prototypu z ekranu głównego i kodu aplikacji.
 - Przeniesiono metryczkę dzisiejszego dnia do prawego górnego obszaru ekranu głównego.
-- Dodano osobny add-on skrótu `Planner Nagród - Rodzic`, który otwiera panel rodzica z menu Home Assistant.
+- Dodano osobny add-on skrótu `Obowiązki dzieci (Panel rodzica)`, który otwiera panel rodzica z menu Home Assistant.
 
 ## 0.1.7
 

@@ -1,4 +1,4 @@
-# Domowy Planner Nagród
+# Obowiązki dzieci
 
 Add-on Home Assistant dla rodzinnego planera obowiązków, gwiazdek, kuponów i nagród.
 

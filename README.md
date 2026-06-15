@@ -1,4 +1,4 @@
-# Domowy Planner Nagród
+# Obowiązki dzieci
 
 Home Assistant OS app/add-on dla rodzinnego planera obowiązków:
 
@@ -21,7 +21,7 @@ W add-onie `ingress_entry` wskazuje domyślnie `/child`, czyli panel w sidebarze
 
 Repozytorium zawiera też drugi, lekki add-on:
 
-- `Planner Nagród - Rodzic` - osobny skrót w menu Home Assistant, który przekierowuje do `/parent` głównej aplikacji.
+- `Obowiązki dzieci (Panel rodzica)` - osobny skrót w menu Home Assistant, który przekierowuje do `/parent` głównej aplikacji.
 
 Ten drugi add-on nie przechowuje danych. Służy wyłącznie jako wygodne wejście dla rodzica w aplikacji mobilnej Home Assistant.
 
@@ -44,28 +44,20 @@ Stan aplikacji jest zapisywany lokalnie w:
 
 To oznacza, że tablet dzieci i telefon rodzica widzą wspólny stan.
 
-## Dostęp rodzica
+Ustawienia dostępu rodziców i lista użytkowników widzianych przez aplikację są zapisywane obok stanu:
 
-Opcja `parent_users` pozwala wskazać użytkowników Home Assistant, którzy mogą otworzyć `/parent`.
-
-Przykład:
-
-```yaml
-parent_users:
-  - jaroslaw
-  - 1234567890abcdef
+```text
+/data/planner-parent-users.json
+/data/planner-users.json
 ```
 
-Backend sprawdza kilka typowych nagłówków ingress/user:
+## Dostęp rodzica
 
-- `x-hass-user-id`
-- `x-hass-user`
-- `x-ha-user-id`
-- `x-ha-user`
-- `remote-user`
-- `x-forwarded-user`
+Rodziców wybieramy w aplikacji: `Panel rodzica -> Dostęp rodziców`.
 
-Jeśli `parent_users` jest puste, panel rodzica jest dostępny dla każdego użytkownika, który ma dostęp do ingress add-ona. Po pierwszym uruchomieniu w Home Assistant trzeba sprawdzić w logach/nagłówkach, który identyfikator użytkownika przekazuje Twoja instalacja, i wpisać go w opcjach.
+Aplikacja pokazuje użytkowników Home Assistant, którzy przynajmniej raz otworzyli Planner. Dzięki temu nie trzeba ręcznie wpisywać ID użytkowników.
+
+Jeśli nie wybierzesz żadnego rodzica, panel rodzica pozostaje dostępny dla użytkowników, którzy mają dostęp do add-ona w Home Assistant. Po zaznaczeniu rodziców dostęp do panelu rodzica jest ograniczony do wybranych kont.
 
 ## Instalacja w Home Assistant bez terminala
 
@@ -85,13 +77,13 @@ https://github.com/qlphone-ops/family-reward-planner-ha
 
 5. Odśwież listę dostępnych aplikacji/dodatków.
 
-6. Wybierz `Domowy Planner Nagród` i kliknij instalację.
+6. Wybierz `Obowiązki dzieci` i kliknij instalację.
 
-7. Opcjonalnie zainstaluj też `Planner Nagród - Rodzic`, jeśli chcesz mieć osobny skrót do panelu rodzica w menu Home Assistant.
+7. Opcjonalnie zainstaluj też `Obowiązki dzieci (Panel rodzica)`, jeśli chcesz mieć osobny skrót do panelu rodzica w menu Home Assistant.
 
-8. W konfiguracji aplikacji ustaw `parent_users`, jeśli chcesz ograniczyć `/parent` tylko do kont rodziców.
+8. Otwórz `Panel rodzica -> Dostęp rodziców` i zaznacz konta rodziców, jeśli chcesz ograniczyć panel rodzica tylko do tych użytkowników.
 
-9. Uruchom aplikację i otwórz panel `Planner Nagród`.
+9. Uruchom aplikację i otwórz panel `Obowiązki dzieci`.
 
 Aktualizacje również wykonujemy z interfejsu Home Assistant:
 
@@ -103,7 +95,7 @@ Aktualizacje również wykonujemy z interfejsu Home Assistant:
 
 4. W Home Assistant odświeżamy repozytorium aplikacji/dodatków.
 
-5. Jeśli pojawi się aktualizacja `Domowy Planner Nagród` albo `Planner Nagród - Rodzic`, klikamy aktualizację z poziomu UI.
+5. Jeśli pojawi się aktualizacja `Obowiązki dzieci` albo `Obowiązki dzieci (Panel rodzica)`, klikamy aktualizację z poziomu UI.
 
 Nie zakładamy używania terminala HA do instalacji ani aktualizacji. Terminal zostaje tylko jako awaryjne narzędzie diagnostyczne, np. gdy trzeba sprawdzić szczegółowe logi.
 

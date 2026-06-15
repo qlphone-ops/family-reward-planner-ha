@@ -6,7 +6,9 @@ const PORT = Number(process.env.PORT || 8099);
 const ROOT = __dirname;
 const DATA_DIR = process.env.PLANNER_DATA_DIR || "/data";
 const STATE_FILE = path.join(DATA_DIR, "planner-state.json");
-const OPTIONS_FILE = "/data/options.json";
+const OPTIONS_FILE = path.join(DATA_DIR, "options.json");
+const USERS_FILE = path.join(DATA_DIR, "planner-users.json");
+const PARENTS_FILE = path.join(DATA_DIR, "planner-parent-users.json");
 const APP_VERSION = require("./package.json").version;
 
 const MIME_TYPES = {
@@ -35,11 +37,73 @@ async function writeJson(filePath, value) {
   await fs.rename(tmp, filePath);
 }
 
-async function options() {
-  const configured = await readJson(OPTIONS_FILE, {});
+function unique(values) {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+function normalizeUserId(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function firstHeader(req, names) {
+  for (const name of names) {
+    const value = req.headers[name];
+    if (Array.isArray(value) && value[0]) return String(value[0]);
+    if (value) return String(value);
+  }
+  return "";
+}
+
+function userFromRequest(req) {
+  const id = firstHeader(req, [
+    "x-hass-user-id",
+    "x-ha-user-id",
+    "x-home-assistant-user-id",
+    "x-forwarded-user",
+    "remote-user",
+    "x-hass-user",
+    "x-ha-user",
+  ]);
+  if (!id) return null;
+  const name = firstHeader(req, [
+    "x-hass-user-name",
+    "x-ha-user-name",
+    "x-home-assistant-user-name",
+    "x-hass-user",
+    "x-ha-user",
+    "x-forwarded-user",
+    "remote-user",
+  ]) || id;
   return {
-    parent_users: Array.isArray(configured.parent_users) ? configured.parent_users : [],
-    child_module_title: configured.child_module_title || "Domowy Planner Nagród",
+    id: normalizeUserId(id),
+    label: name,
+    lastSeenAt: Date.now(),
+  };
+}
+
+async function rememberUser(req) {
+  const user = userFromRequest(req);
+  if (!user) return null;
+  const users = await readJson(USERS_FILE, []);
+  const nextUsers = Array.isArray(users) ? users : [];
+  const existing = nextUsers.find((item) => normalizeUserId(item.id) === user.id);
+  if (existing) Object.assign(existing, user);
+  else nextUsers.push(user);
+  await writeJson(USERS_FILE, nextUsers.sort((a, b) => String(a.label).localeCompare(String(b.label), "pl")));
+  return user;
+}
+
+async function options(currentUser = null) {
+  const configured = await readJson(OPTIONS_FILE, {});
+  const selectedParents = await readJson(PARENTS_FILE, []);
+  const observedUsers = await readJson(USERS_FILE, []);
+  const configuredParents = Array.isArray(configured.parent_users) ? configured.parent_users : [];
+  return {
+    parent_users: unique([...configuredParents, ...(Array.isArray(selectedParents) ? selectedParents : [])]),
+    observed_users: Array.isArray(observedUsers) ? observedUsers : [],
+    configured_parent_users: configuredParents,
+    current_user: currentUser,
+    child_module_title: configured.child_module_title || "Obowiązki dzieci",
     parent_module_title: configured.parent_module_title || "Panel rodzica",
   };
 }
@@ -52,11 +116,11 @@ function userCandidates(req) {
     req.headers["x-ha-user"],
     req.headers["remote-user"],
     req.headers["x-forwarded-user"],
-  ].filter(Boolean).map((value) => String(value).toLowerCase());
+  ].filter(Boolean).map((value) => normalizeUserId(value));
 }
 
 function canAccessParent(req, appOptions) {
-  const allowed = appOptions.parent_users.map((user) => String(user).trim().toLowerCase()).filter(Boolean);
+  const allowed = appOptions.parent_users.map(normalizeUserId).filter(Boolean);
   if (!allowed.length) return true;
   const candidates = userCandidates(req);
   return candidates.some((candidate) => allowed.includes(candidate));
@@ -94,6 +158,10 @@ async function serveIndex(req, res, moduleName, appOptions) {
     `window.__PLANNER_OPTIONS__ = ${JSON.stringify({
       child_module_title: appOptions.child_module_title,
       parent_module_title: appOptions.parent_module_title,
+      parent_users: appOptions.parent_users,
+      configured_parent_users: appOptions.configured_parent_users,
+      observed_users: appOptions.observed_users,
+      current_user: appOptions.current_user,
     })};`,
     `window.__PLANNER_STATE__ = ${JSON.stringify(state)};`,
     "</script>",
@@ -156,7 +224,8 @@ async function serveStatic(req, res, pathname) {
 }
 
 async function handle(req, res) {
-  const appOptions = await options();
+  const currentUser = await rememberUser(req);
+  const appOptions = await options(currentUser);
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const prefix = ingressPrefix(url.pathname);
   if (prefix && url.pathname === prefix) {
@@ -167,6 +236,26 @@ async function handle(req, res) {
 
   if (pathname === "/healthz") return json(res, 200, { ok: true, version: APP_VERSION });
   if (pathname === "/api/options") return json(res, 200, appOptions);
+  if (pathname === "/api/users") {
+    if (!canAccessParent(req, appOptions)) return json(res, 403, { error: "parent_module_forbidden" });
+    return json(res, 200, {
+      users: appOptions.observed_users,
+      parent_users: appOptions.parent_users,
+      configured_parent_users: appOptions.configured_parent_users,
+      current_user: appOptions.current_user,
+    });
+  }
+  if (pathname === "/api/parents") {
+    if (!canAccessParent(req, appOptions)) return json(res, 403, { error: "parent_module_forbidden" });
+    if (req.method === "PUT") {
+      const incoming = JSON.parse(await readBody(req));
+      const parentUsers = unique(Array.isArray(incoming.parent_users) ? incoming.parent_users : []);
+      await writeJson(PARENTS_FILE, parentUsers);
+      return json(res, 200, { ok: true, parent_users: parentUsers });
+    }
+    if (req.method === "GET") return json(res, 200, { parent_users: appOptions.parent_users });
+    return json(res, 405, { error: "method_not_allowed" });
+  }
 
   if (pathname === "/api/state") {
     if (req.method === "GET") {
