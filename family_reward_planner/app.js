@@ -822,7 +822,7 @@ function renderChild(child) {
   return `
     <section class="screen">
       <div class="topbar">
-        <div style="display:flex;align-items:center;gap:22px">
+        <div class="child-page-title">
           <button class="back-button" data-view="home">‹</button>
           <div class="title-block">
             <h1>Karta: ${childName}</h1>
@@ -850,12 +850,8 @@ function renderChild(child) {
         ${periods().map((period) => renderTaskSection(child, period)).join("")}
       </div>
       ${renderChildHistory(child)}
-      <div class="bottom-strip">
+      <div class="bottom-strip child-day-note">
         <span>${excused ? "Dzień jest usprawiedliwiony przez rodzica." : emptyToday ? "Na dziś nie ma przypisanych obowiązków." : complete ? `Brawo ${childName}. Dzisiejsza gwiazdka jest zdobyta.` : "Dobra robota. Zostały jeszcze drobiazgi."}</span>
-        <span>
-          <button class="secondary" data-view="home">Panel</button>
-          <button class="primary" data-view="shop">Sklep</button>
-        </span>
       </div>
       ${toast()}
     </section>
@@ -1017,12 +1013,7 @@ function renderShop(child) {
         </div>
       </section>
       ${renderRewardHistory(child)}
-      <div class="bottom-strip">
-        <span>${bigTripHint(child)}</span>
-        <span>
-          <button class="secondary" data-view="child">Karta</button>
-        </span>
-      </div>
+      <div class="bottom-strip shop-hint"><span>${bigTripHint(child)}</span></div>
       ${renderRedeemConfirm()}
       ${toast()}
     </section>

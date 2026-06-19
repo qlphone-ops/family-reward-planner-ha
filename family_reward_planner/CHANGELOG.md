@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Przebudowano mobilną kartę obowiązków: zwarto ułożono nagłówek, dzień i saldo, a hero z postępem nie ma już pustego pola ze strzałką.
+- Uporządkowano mobilne menu dziecka, sekcje pór dnia, historię oraz komunikat kończący dzień.
+- Usunięto powielone przyciski na dole karty i sklepu; nawigacja jest dostępna w jednym górnym menu.
+
 ## 0.3.0
 
 - Przebudowano zapis danych na dzienny model: `completions`, `dailyStars` i `couponEvents`.
