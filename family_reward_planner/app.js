@@ -173,6 +173,8 @@ function persistedStateFrom(source) {
 }
 
 function apiUrl(name) {
+  const ingressBase = String(runtimeWindow.__PLANNER_API_BASE__ || "").replace(/\/+$/, "");
+  if (ingressBase) return `${ingressBase}/api/${name}`;
   const pathname = runtimeWindow.location?.pathname || "/";
   const base = pathname.endsWith("/parent") || pathname.endsWith("/child")
     ? pathname.replace(/\/(parent|child)$/, "")
@@ -211,6 +213,10 @@ function actionErrorLabel(error) {
     invalid_chore: "Uzupełnij nazwę, dzieci i dni",
     invalid_reward: "Uzupełnij nazwę i dzieci",
     invalid_vacation_range: "Data końca musi być po dacie początku",
+    http_404: "Nie znaleziono akcji zapisu. Odśwież aplikację i spróbuj ponownie.",
+    http_502: "Aplikacja właśnie się uruchamia. Spróbuj ponownie za chwilę.",
+    http_503: "Aplikacja jest chwilowo niedostępna. Spróbuj ponownie za chwilę.",
+    network_error: "Nie udało się połączyć z aplikacją. Odśwież widok i spróbuj ponownie.",
   }[error] || "Nie udało się zapisać zmiany");
 }
 
@@ -240,9 +246,16 @@ function runAction(type, payload = {}, options = {}) {
     body,
     keepalive: body.length < 60000,
   })
-    .then((response) => response.json().then((body) => ({ response, body })).catch(() => ({ response, body: {} })))
+    .then(async (response) => {
+      const raw = await response.text();
+      let responseBody = {};
+      try {
+        responseBody = raw ? JSON.parse(raw) : {};
+      } catch {}
+      return { response, body: responseBody };
+    })
     .then(({ response, body }) => {
-      if (!response.ok) throw new Error(body.error || "action_failed");
+      if (!response.ok) throw new Error(body.error || `http_${response.status}`);
       applyServerState(body.state, {
         view: options.view || state.view,
         childId: options.childId || state.activeChildId,
@@ -251,8 +264,10 @@ function runAction(type, payload = {}, options = {}) {
       return true;
     })
     .catch((error) => {
-      showToast(actionErrorLabel(error.message));
-      return true;
+      const code = error instanceof TypeError && /fetch/i.test(error.message) ? "network_error" : error.message;
+      console.warn("Planner action failed", { type, url: apiUrl("action"), code });
+      showToast(actionErrorLabel(code));
+      return false;
     });
 }
 

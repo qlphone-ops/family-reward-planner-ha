@@ -840,6 +840,12 @@ function jsonForScript(value) {
   });
 }
 
+function browserIngressBase(req) {
+  const headerPath = firstHeader(req, ["x-ingress-path"]);
+  if (headerPath.startsWith("/")) return headerPath.replace(/\/+$/, "");
+  return ingressPrefix(safeRequestUrl(req).pathname);
+}
+
 async function readBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -864,6 +870,7 @@ async function serveIndex(req, res, moduleName, appOptions) {
   const bootstrap = [
     "<script>",
     `window.__PLANNER_API__ = true;`,
+    `window.__PLANNER_API_BASE__ = ${jsonForScript(browserIngressBase(req))};`,
     `window.__PLANNER_MODULE__ = ${jsonForScript(moduleName)};`,
     `window.__PLANNER_OPTIONS__ = ${jsonForScript({
       child_module_title: appOptions.child_module_title,
@@ -893,6 +900,10 @@ function ingressPrefix(pathname) {
   const segments = pathname.split("/").filter(Boolean);
   const firstSegment = segments[0] || "";
   const secondSegment = segments[1] || "";
+  const thirdSegment = segments[2] || "";
+  if (firstSegment === "api" && secondSegment === "hassio_ingress" && (thirdSegment === "family_reward_planner" || thirdSegment.endsWith("_family_reward_planner"))) {
+    return `/${firstSegment}/${secondSegment}/${thirdSegment}`;
+  }
   if (firstSegment === "app" && secondSegment.endsWith("_family_reward_planner")) {
     return `/${firstSegment}/${secondSegment}`;
   }
