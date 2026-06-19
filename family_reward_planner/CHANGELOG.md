@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.5
+
+- Wzmocniono zapis stanu w Home Assistant: niezapisane zmiany są ponawiane, a przy opuszczaniu aplikacji wysyłane przez `sendBeacon`/`keepalive`.
+- Zabezpieczono powrót z iOS/HA webview przed pobraniem starego stanu z serwera, jeśli w przeglądarce czeka jeszcze niezapisana zmiana.
+- Backend przyjmuje awaryjny zapis `POST /api/state` i loguje udane zapisy stanu, co ułatwia diagnostykę problemów z pamięcią.
+- Dodano dark mode sterowany z panelu rodzica i zapisywany jako wspólne ustawienie domu.
+- Przebudowano główny ekran panelu rodzica na dashboard z metrykami, akceptacjami i kafelkami zarządzania.
+- Poprawiono mobilny układ karty obowiązków dziecka.
+- Dodano ikonę aplikacji dla listy dodatków Home Assistant.
+
 ## 0.2.4
 
 - Poprawiono trwały zapis danych w Home Assistant: zmiany obowiązków, gwiazdek, kuponów, nagród i historii są zapisywane natychmiast do `/data/planner-state.json`.

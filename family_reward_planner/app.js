@@ -1,9 +1,13 @@
 const STORE_KEY = "domowy-planner-prototype-v2";
+const PENDING_STORE_KEY = `${STORE_KEY}-pending`;
 
 const initialState = {
   view: "home",
   activeChildId: "",
   toast: "",
+  settings: {
+    theme: "light",
+  },
   dayExcuses: {},
   dayOverrides: {},
   vacationRanges: [],
@@ -26,13 +30,15 @@ const queryModule = urlParams.get("module") === "parent" ? "parent" : "";
 const appModule = queryModule || pathModule || runtimeWindow.__PLANNER_MODULE__ || "child";
 const isParentModule = appModule === "parent";
 
+let recoveredServerPayload = "";
 let state = loadState();
 let redeemConfirmId = "";
 let parentUnlocked = isParentModule;
 let parentTargetView = "parent";
-let lastSavedPayload = JSON.stringify(persistedStateFrom(state));
+let lastSavedPayload = recoveredServerPayload || JSON.stringify(persistedStateFrom(state));
 let lastQueuedPayload = lastSavedPayload;
 let saveQueue = Promise.resolve();
+let saveErrorVisible = false;
 let historyFilterDays = "7";
 let homeAssistantUsers = runtimeWindow.__PLANNER_OPTIONS__?.ha_users || [];
 let homeAssistantUsersError = runtimeWindow.__PLANNER_OPTIONS__?.ha_users_error || "";
@@ -72,7 +78,10 @@ function emptyTasks() {
 function loadState() {
   try {
     if (runtimeWindow.__PLANNER_API__) {
-      return normalizeState(structuredClone(runtimeWindow.__PLANNER_STATE__ || initialState));
+      const serverState = normalizeState(structuredClone(runtimeWindow.__PLANNER_STATE__ || initialState));
+      recoveredServerPayload = JSON.stringify(persistedStateFrom(serverState));
+      const pending = readPendingPayload();
+      return pending ? normalizeState(JSON.parse(pending)) : serverState;
     }
     if (runtimeWindow.__PLANNER_STATE__) {
       return normalizeState(structuredClone(runtimeWindow.__PLANNER_STATE__));
@@ -84,9 +93,37 @@ function loadState() {
   }
 }
 
+function readPendingPayload() {
+  try {
+    const payload = localStorage.getItem(PENDING_STORE_KEY);
+    if (!payload) return "";
+    JSON.parse(payload);
+    return payload;
+  } catch {
+    try {
+      localStorage.removeItem(PENDING_STORE_KEY);
+    } catch {}
+    return "";
+  }
+}
+
+function writePendingPayload(payload) {
+  try {
+    localStorage.setItem(PENDING_STORE_KEY, payload);
+  } catch {}
+}
+
+function clearPendingPayload(payload) {
+  try {
+    if (localStorage.getItem(PENDING_STORE_KEY) === payload) {
+      localStorage.removeItem(PENDING_STORE_KEY);
+    }
+  } catch {}
+}
+
 function saveState() {
   const payload = JSON.stringify(persistedState());
-  if (payload === lastQueuedPayload) return saveQueue;
+  if (payload === lastSavedPayload) return saveQueue;
 
   if (!runtimeWindow.__PLANNER_API__) {
     localStorage.setItem(STORE_KEY, payload);
@@ -94,6 +131,10 @@ function saveState() {
     lastQueuedPayload = payload;
     return Promise.resolve();
   }
+
+  writePendingPayload(payload);
+
+  if (payload === lastQueuedPayload) return saveQueue;
 
   const payloadToSave = payload;
   lastQueuedPayload = payloadToSave;
@@ -108,16 +149,53 @@ function saveState() {
     .then((response) => {
       if (!response.ok) throw new Error("save failed");
       lastSavedPayload = payloadToSave;
+      clearPendingPayload(payloadToSave);
+      saveErrorVisible = false;
     })
     .catch(() => {
       if (lastQueuedPayload === payloadToSave) lastQueuedPayload = lastSavedPayload;
-      state.toast = "Nie udało się zapisać danych w Home Assistant";
-      runtimeWindow.setTimeout(() => {
-        if (state.toast === "Nie udało się zapisać danych w Home Assistant") state.toast = "";
-      }, 2200);
+      if (!saveErrorVisible) {
+        saveErrorVisible = true;
+        state.toast = "Nie udało się zapisać danych w Home Assistant";
+        render();
+        runtimeWindow.setTimeout(() => {
+          if (state.toast === "Nie udało się zapisać danych w Home Assistant") {
+            state.toast = "";
+            render();
+          }
+          saveErrorVisible = false;
+        }, 2600);
+      }
     });
 
   return saveQueue;
+}
+
+function flushStateBeforeLeave() {
+  const payload = JSON.stringify(persistedState());
+  if (payload === lastSavedPayload) return;
+
+  if (!runtimeWindow.__PLANNER_API__) {
+    localStorage.setItem(STORE_KEY, payload);
+    lastSavedPayload = payload;
+    lastQueuedPayload = payload;
+    return;
+  }
+
+  writePendingPayload(payload);
+
+  const url = apiUrl("state");
+  if (payload.length < 60000 && runtimeWindow.navigator?.sendBeacon) {
+    const blob = new Blob([payload], { type: "application/json" });
+    if (runtimeWindow.navigator.sendBeacon(url, blob)) return;
+  }
+
+  fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: payload,
+    keepalive: payload.length < 60000,
+  }).catch(() => {});
 }
 
 function parentPin() {
@@ -146,6 +224,19 @@ function apiUrl(name) {
 
 function refreshStateFromServer() {
   if (!runtimeWindow.__PLANNER_API__ || lastQueuedPayload !== lastSavedPayload) return;
+  const pending = readPendingPayload();
+  if (pending && pending !== lastSavedPayload) {
+    const currentView = state.view;
+    const currentChildId = state.activeChildId;
+    const currentToast = state.toast;
+    state = normalizeState(JSON.parse(pending));
+    state.view = currentView;
+    state.activeChildId = currentChildId || state.activeChildId;
+    state.toast = currentToast;
+    lastQueuedPayload = lastSavedPayload;
+    render();
+    return;
+  }
   fetch(apiUrl("state"))
     .then((response) => (response.ok ? response.json() : null))
     .then((payload) => {
@@ -167,7 +258,15 @@ function refreshStateFromServer() {
     .catch(() => {});
 }
 
+function applyTheme() {
+  const theme = state.settings?.theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = theme;
+}
+
 function normalizeState(value) {
+  value.settings = {
+    theme: value.settings?.theme === "dark" ? "dark" : "light",
+  };
   value.children = value.children || {};
   Object.entries(value.children).forEach(([childId, child]) => {
     const inferredGender = child.gender || (String(child.name || "").toLowerCase().endsWith("a") ? "girl" : "boy");
@@ -507,6 +606,7 @@ function render() {
   if (!isParentModule && isParentView(state.view)) {
     state.view = "home";
   }
+  applyTheme();
   saveState();
   if (state.view === "home") app.innerHTML = renderHome();
   if (state.view === "child") app.innerHTML = renderChild(activeChild());
@@ -912,29 +1012,99 @@ function renderParentGate() {
 
 function renderParent() {
   const pending = state.coupons.filter((coupon) => coupon.status === "pending");
+  const children = Object.values(state.children);
+  const completedToday = children.filter((child) => {
+    const stats = taskStats(child);
+    return stats.total > 0 && stats.remaining === 0;
+  }).length;
+  const totalStars = children.reduce((sum, child) => sum + Number(child.stars || 0), 0);
   return `
     <section class="parent-shell">
-      <div class="title-block">
-        <h1>Panel rodzica</h1>
-        <p>Nagrody, korekty i dni usprawiedliwione</p>
-      </div>
-      <div class="stack" style="margin-top:24px">
-        ${pending.length ? pending.map(renderParentRequest).join("") : `<div class="parent-card"><h2>Brak próśb</h2><p class="child-meta">Aktualnie żaden kupon nie czeka na akceptację.</p></div>`}
-        <div class="parent-card">
-          <h2>Szybkie akcje</h2>
-          <div class="stack">
-            <button class="primary" data-view="dayAdmin">Dni i usprawiedliwienia</button>
-            <button class="primary" data-view="childrenAdmin">Zarządzaj dziećmi</button>
-            <button class="primary" data-view="edit">Zarządzaj obowiązkami</button>
-            <button class="primary" data-view="rewardsAdmin">Zarządzaj nagrodami</button>
-            <button class="primary" data-view="accessAdmin">Dostęp rodziców</button>
-            <button class="secondary" data-view="shop">Podgląd sklepu</button>
-          </div>
+      <div class="parent-dashboard-hero">
+        <div class="title-block">
+          <h1>Panel rodzica</h1>
+          <p>Nagrody, obowiązki, dni wolne i ustawienia domu.</p>
         </div>
+        ${renderThemeSwitch()}
+      </div>
+      <div class="parent-dashboard-grid">
+        <div class="parent-stat-card stat-pending">
+          <span>Do decyzji</span>
+          <strong>${pending.length}</strong>
+          <small>${pending.length === 1 ? "kupon czeka" : "kuponów czeka"}</small>
+        </div>
+        <div class="parent-stat-card stat-children">
+          <span>Dzieci</span>
+          <strong>${children.length}</strong>
+          <small>${completedToday}/${children.length || 0} z gwiazdką dzisiaj</small>
+        </div>
+        <div class="parent-stat-card stat-stars">
+          <span>Saldo domu</span>
+          <strong>${totalStars}</strong>
+          <small>${starWord(totalStars)} razem</small>
+        </div>
+      </div>
+      <div class="parent-dashboard-layout">
+        <section class="parent-card parent-requests-card">
+          <div class="admin-list-head">
+            <div>
+              <h2>Akceptacje</h2>
+              <p class="child-meta">Kupony zamówione przez dzieci.</p>
+            </div>
+            <span class="status-badge status-pending">${pending.length}</span>
+          </div>
+          <div class="parent-request-list">
+            ${pending.length ? pending.map(renderParentRequest).join("") : `<div class="empty-row">Aktualnie żaden kupon nie czeka na akceptację.</div>`}
+          </div>
+        </section>
+        <section class="parent-card parent-menu-card">
+          <div class="admin-list-head">
+            <div>
+              <h2>Zarządzanie</h2>
+              <p class="child-meta">Najważniejsze moduły konfiguracyjne.</p>
+            </div>
+          </div>
+          <div class="parent-menu-grid">
+            ${renderParentMenuButton("childrenAdmin", "Dzieci", "Karty, saldo i styl", "👤")}
+            ${renderParentMenuButton("edit", "Obowiązki", "Lista, dni i kolejność", "✓")}
+            ${renderParentMenuButton("rewardsAdmin", "Nagrody", "Sklep i dostępność", "★")}
+            ${renderParentMenuButton("dayAdmin", "Kalendarz", "Wolne, choroba, wakacje", "⌂")}
+            ${renderParentMenuButton("accessAdmin", "Dostęp", "Konta rodziców", "🔒")}
+          </div>
+        </section>
       </div>
       ${toast()}
     </section>
   `;
+}
+
+function renderThemeSwitch() {
+  const dark = state.settings?.theme === "dark";
+  return `
+    <div class="theme-card" aria-label="Tryb wyglądu">
+      <span>Wygląd</span>
+      <div class="theme-switch">
+        <button class="${dark ? "" : "active"}" data-theme="light" type="button">Jasny</button>
+        <button class="${dark ? "active" : ""}" data-theme="dark" type="button">Ciemny</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderParentMenuButton(view, title, note, symbol) {
+  return `
+    <button class="parent-menu-tile" data-view="${view}">
+      <span>${symbol}</span>
+      <strong>${title}</strong>
+      <small>${note}</small>
+    </button>
+  `;
+}
+
+function setTheme(theme) {
+  state.settings = state.settings || {};
+  state.settings.theme = theme === "dark" ? "dark" : "light";
+  showToast(state.settings.theme === "dark" ? "Tryb ciemny włączony" : "Tryb jasny włączony");
 }
 
 function renderChildrenAdmin() {
@@ -1347,6 +1517,9 @@ function formatDateLabel(key) {
 function bindEvents() {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view));
+  });
+  document.querySelectorAll("[data-theme]").forEach((button) => {
+    button.addEventListener("click", () => setTheme(button.dataset.theme));
   });
   document.querySelectorAll("[data-card-child], [data-child]").forEach((card) => {
     card.addEventListener("click", () => setView("child", card.dataset.cardChild || card.dataset.child));
@@ -1791,8 +1964,11 @@ function deleteVacationRange(rangeId) {
 }
 
 if (runtimeWindow.__PLANNER_API__) {
+  runtimeWindow.addEventListener?.("pagehide", flushStateBeforeLeave);
+  runtimeWindow.addEventListener?.("beforeunload", flushStateBeforeLeave);
   runtimeWindow.addEventListener?.("focus", refreshStateFromServer);
   document.addEventListener?.("visibilitychange", () => {
+    if (document.hidden) flushStateBeforeLeave();
     if (!document.hidden) refreshStateFromServer();
   });
 }

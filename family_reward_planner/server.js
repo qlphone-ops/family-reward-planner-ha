@@ -408,9 +408,10 @@ async function handle(req, res) {
     if (req.method === "GET") {
       return json(res, 200, await readJson(STATE_FILE, null));
     }
-    if (req.method === "PUT") {
+    if (req.method === "PUT" || req.method === "POST") {
       const incoming = JSON.parse(await readBody(req));
       await writeJson(STATE_FILE, incoming);
+      console.log(`Planner state saved: ${Object.keys(incoming.children || {}).length} children, ${(incoming.coupons || []).length} coupons, ${(incoming.history || []).length} history entries`);
       return json(res, 200, { ok: true });
     }
     return json(res, 405, { error: "method_not_allowed" });

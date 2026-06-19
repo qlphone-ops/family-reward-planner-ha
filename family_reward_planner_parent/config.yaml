@@ -1,5 +1,5 @@
 name: Obowiązki dzieci (Panel rodzica)
-version: "0.1.5"
+version: "0.1.6"
 slug: family_reward_planner_parent
 description: Skrót do panelu rodzica aplikacji Obowiązki dzieci.
 arch:

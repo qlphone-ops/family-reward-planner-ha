@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6
+
+- Dodano ikonę skrótu panelu rodzica widoczną na liście dodatków Home Assistant.
+
 ## 0.1.5
 
 - Zmieniono skrót rodzica z przekierowania na proxy do modułu `/parent` głównej aplikacji.
