@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3
+
+- Naprawiono błąd, przez który każde kliknięcie w aplikacji uruchamiało przełączenie na tryb ciemny.
+- Kupony oczekujące na rodzica nie są już klikalne; wyraźnie komunikują, że dopiero zatwierdzony kupon można odebrać.
+- Akcje zapisu są kolejkowane po stronie serwera, dzięki czemu szybkie kliknięcia lub równoległe wejścia do aplikacji nie nadpisują wzajemnie stanu.
+- Usunięto ponowne wyświetlanie starego komunikatu po niezwiązanej akcji oraz zachowano okno potwierdzenia odbioru kuponu przy błędzie zapisu.
+- Poprawiono odmianę słowa „gwiazdka” w historii zatwierdzenia nagrody.
+
 ## 0.3.2
 
 - Naprawiono adresowanie akcji zapisu w Home Assistant Ingress. Aplikacja obsługuje teraz zarówno nowe adresy `/app/...`, jak i klasyczne `/api/hassio_ingress/...`, więc odznaczanie obowiązków nie zależy od wariantu adresu panelu Home Assistant.

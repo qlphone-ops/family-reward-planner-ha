@@ -1301,6 +1301,11 @@ button {
   border-color: #cbeed9;
 }
 
+.coupon.pending {
+  border-color: #f2d4a9;
+  background: #fffaf2;
+}
+
 .coupon-icon {
   display: grid;
   width: 48px;

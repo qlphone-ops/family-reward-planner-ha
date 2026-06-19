@@ -223,11 +223,11 @@ function actionErrorLabel(error) {
 function applyServerState(nextState, options = {}) {
   const currentView = options.view || state.view;
   const currentChildId = options.childId || state.activeChildId;
-  const currentToast = state.toast;
+  const currentToast = options.preserveToast ? state.toast : "";
   state = normalizeState(nextState);
   state.view = currentView;
   state.activeChildId = currentChildId || state.activeChildId;
-  state.toast = options.message || currentToast;
+  state.toast = options.message ?? currentToast;
   const payload = JSON.stringify(persistedStateFrom(state));
   lastSavedPayload = payload;
   lastQueuedPayload = payload;
@@ -259,7 +259,7 @@ function runAction(type, payload = {}, options = {}) {
       applyServerState(body.state, {
         view: options.view || state.view,
         childId: options.childId || state.activeChildId,
-        message: options.message === false ? "" : (body.message || options.message || state.toast),
+        message: options.message === false ? "" : (body.message || options.message || ""),
       });
       return true;
     })
@@ -1042,13 +1042,16 @@ function renderReward(child, reward) {
   let status = { label: canBuy ? "Dostępne" : "Za mało", tone: canBuy ? "available" : "unavailable" };
   if (pending) status = { label: "Czeka na rodzica", tone: "pending" };
   if (ready) status = { label: "Gotowe do odebrania", tone: "ready" };
+  const selectable = canBuy && !pending && !ready;
+  const tag = selectable ? "button" : "div";
+  const action = selectable ? ` data-reward="${escapeAttr(reward.id)}"` : "";
   return `
-    <button class="reward-card ${canBuy || pending || ready ? "" : "disabled"}" style="--accent:${escapeAttr(reward.color)};--soft:${reward.id === "game30" ? "#f2edff" : "#eef9f1"}" data-reward="${escapeAttr(reward.id)}">
+    <${tag} class="reward-card ${selectable ? "" : "disabled"}" style="--accent:${escapeAttr(reward.color)};--soft:${reward.id === "game30" ? "#f2edff" : "#eef9f1"}"${action}>
       <span class="price-badge">${reward.cost} ★</span>
       <div class="reward-art">${icon(reward.icon)}</div>
       <h3>${escapeHtml(reward.title)}</h3>
       <span class="status-badge status-${status.tone}">${status.label}</span>
-    </button>
+    </${tag}>
   `;
 }
 
@@ -1057,14 +1060,17 @@ function renderCoupon(coupon) {
   if (!reward) return "";
   const statusLabel = coupon.status === "pending" ? "Czeka na rodzica" : coupon.status === "ready" ? "Gotowe do odebrania" : "Wykorzystane";
   const statusTone = coupon.status === "pending" ? "pending" : coupon.status === "ready" ? "ready" : "used";
-  const note = coupon.status === "pending" ? "Czeka na decyzje rodzica" : coupon.status === "ready" ? "Gotowe do odebrania" : "Trafiło do historii";
+  const note = coupon.status === "pending" ? "Rodzic musi zatwierdzić tę nagrodę" : coupon.status === "ready" ? "Dotknij, aby odebrać kupon" : "Trafiło do historii";
+  const redeemable = coupon.status === "ready";
+  const tag = redeemable ? "button" : "div";
+  const action = redeemable ? ` data-coupon="${escapeAttr(coupon.id)}"` : ` role="status"`;
   return `
-    <button class="coupon ${coupon.status === "ready" ? "ready" : ""}" data-coupon="${escapeAttr(coupon.id)}">
+    <${tag} class="coupon ${coupon.status === "ready" ? "ready" : "pending"}"${action}>
       <span class="coupon-icon">${icon(reward.icon)}</span>
       <span><h4>${escapeHtml(reward.title)}</h4><small>${note}</small></span>
       <span class="price-badge">${reward.cost} ★</span>
       <span class="status-badge status-${statusTone}">${statusLabel}</span>
-    </button>
+    </${tag}>
   `;
 }
 
@@ -1630,7 +1636,7 @@ function bindEvents() {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view));
   });
-  document.querySelectorAll("[data-theme]").forEach((button) => {
+  app.querySelectorAll("button[data-theme]").forEach((button) => {
     button.addEventListener("click", () => setTheme(button.dataset.theme));
   });
   document.querySelectorAll("[data-card-child], [data-child]").forEach((card) => {
@@ -1815,8 +1821,7 @@ function handleCoupon(couponId) {
   const coupon = state.coupons.find((item) => item.id === couponId);
   if (!coupon) return;
   if (coupon.status === "pending") {
-    state.view = "parent";
-    showToast("Kupon czeka na rodzica");
+    showToast("Ten kupon czeka na zatwierdzenie przez rodzica");
     return;
   }
   if (coupon.status === "ready") {
@@ -1827,8 +1832,8 @@ function handleCoupon(couponId) {
 
 function redeemCoupon(couponId) {
   if (runtimeWindow.__PLANNER_API__) {
-    runAction("redeem_coupon", { couponId }, { view: "shop", childId: state.activeChildId }).then(() => {
-      redeemConfirmId = "";
+    runAction("redeem_coupon", { couponId }, { view: "shop", childId: state.activeChildId }).then((saved) => {
+      if (saved) redeemConfirmId = "";
     });
     return;
   }
