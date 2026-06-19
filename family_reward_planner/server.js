@@ -46,6 +46,7 @@ let haUsersCache = {
   users: [],
   error: "",
 };
+let actionQueue = Promise.resolve();
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -89,6 +90,15 @@ function todayDateKey() {
 function safeDateKey(value) {
   const key = String(value || "").trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : todayDateKey();
+}
+
+function starAccusative(count) {
+  const value = Math.abs(Number(count) || 0);
+  const last = value % 10;
+  const lastTwo = value % 100;
+  if (value === 1) return "gwiazdkę";
+  if (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) return "gwiazdki";
+  return "gwiazdek";
 }
 
 function slugify(text) {
@@ -765,7 +775,7 @@ function applyAction(state, type, payload = {}) {
       child.stars -= reward.cost;
       coupon.status = "ready";
       coupon.approvedAt = Date.now();
-      addHistory(state, child.id, "Nagroda zatwierdzona", `${reward.title} za ${reward.cost} gwiazdek`, "reward");
+      addHistory(state, child.id, "Nagroda zatwierdzona", `${reward.title} za ${reward.cost} ${starAccusative(reward.cost)}`, "reward");
       addCouponEvent(state, coupon, "approved", "Rodzic zatwierdził kupon");
       return "Rodzic zatwierdził kupon";
     }
@@ -838,6 +848,12 @@ function jsonForScript(value) {
     if (char === "\u2028") return "\\u2028";
     return "\\u2029";
   });
+}
+
+function queueAction(action) {
+  const queued = actionQueue.then(action, action);
+  actionQueue = queued.catch(() => {});
+  return queued;
 }
 
 function browserIngressBase(req) {
@@ -1004,17 +1020,20 @@ async function handle(req, res) {
     if (PARENT_ACTIONS.has(type) && !canAccessParent(req, appOptions)) {
       return json(res, 403, { error: "parent_action_forbidden" });
     }
-    const state = normalizeState(await readJson(STATE_FILE, null));
-    let message = "";
     try {
-      message = applyAction(state, type, incoming.payload || {}) || "";
+      const result = await queueAction(async () => {
+        const state = normalizeState(await readJson(STATE_FILE, null));
+        const message = applyAction(state, type, incoming.payload || {}) || "";
+        const nextState = normalizeState(state);
+        await writeJson(STATE_FILE, nextState);
+        return { message, state: nextState };
+      });
+      console.log(`Planner action saved: ${type}`);
+      return json(res, 200, { ok: true, state: result.state, message: result.message });
     } catch (error) {
+      console.warn(`Planner action failed: ${type}`, error);
       return json(res, 400, { error: error.message || "action_failed" });
     }
-    const nextState = normalizeState(state);
-    await writeJson(STATE_FILE, nextState);
-    console.log(`Planner action saved: ${type}`);
-    return json(res, 200, { ok: true, state: nextState, message });
   }
 
   const requestedModule = url.searchParams.get("module") === "parent" ? "parent" : "child";
