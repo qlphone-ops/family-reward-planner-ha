@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.5
+
+- Zastąpiono ikonę dodatku wyraźnym znakiem gwiazdki i wykonanych obowiązków, czytelnym w jasnym oraz ciemnym interfejsie Home Assistant.
+
 ## 0.3.4
 
 - Przebudowano responsywny układ sklepu: nagrody zawijają się w siatkę na większych ekranach, a na telefonie mają kompaktowy układ dotykowy.

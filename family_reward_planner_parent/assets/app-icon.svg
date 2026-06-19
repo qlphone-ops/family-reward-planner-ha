@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Panel rodzica</title>
+  <desc id="desc">Zatwierdzone rodzinne nagrody</desc>
+  <rect width="256" height="256" rx="56" fill="#171d33"/>
+  <rect x="18" y="18" width="220" height="220" rx="46" fill="#2d3157" stroke="#6858bb" stroke-width="6"/>
+  <rect x="55" y="63" width="146" height="122" rx="30" fill="#f8f7ff"/>
+  <path d="M128 83c27 0 48 11 48 11v32c0 35-23 52-48 62-25-10-48-27-48-62V94s21-11 48-11Z" fill="#7055ca"/>
+  <path d="m103 129 17 17 34-39" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="78" cy="187" r="15" fill="#ffd76a"/>
+  <circle cx="178" cy="187" r="15" fill="#74d6a0"/>
+  <path d="M78 187h100" stroke="#9b91df" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="198" cy="61" r="12" fill="#ffd76a"/>
+</svg>
