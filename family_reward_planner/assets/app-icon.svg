@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Obowiązki dzieci</title>
+  <desc id="desc">Gwiazdka i wykonane zadanie</desc>
+  <rect width="256" height="256" rx="56" fill="#13213d"/>
+  <rect x="18" y="18" width="220" height="220" rx="46" fill="#20375f" stroke="#40649f" stroke-width="6"/>
+  <path d="M128 48 145 88 188 92 155 121 165 164 128 142 91 164 101 121 68 92 111 88Z" fill="#ffd76a" stroke="#f0ad33" stroke-width="6" stroke-linejoin="round"/>
+  <rect x="62" y="145" width="132" height="54" rx="24" fill="#f7fbff"/>
+  <circle cx="91" cy="172" r="16" fill="#2b9b60"/>
+  <path d="m82 172 7 7 12-15" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M122 163h45M122 181h31" fill="none" stroke="#40649f" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="198" cy="61" r="12" fill="#f3b33d"/>
+</svg>

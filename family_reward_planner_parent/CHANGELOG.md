@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8
+
+- Zastąpiono ikonę panelu rodzica osobnym znakiem zatwierdzania, dzięki czemu oba wpisy aplikacji są łatwe do odróżnienia w Home Assistant.
+
 ## 0.1.7
 
 - Panel rodzica może być widoczny w menu Home Assistant dla zwykłych użytkowników, a dostęp jest weryfikowany przez główną aplikację na podstawie wybranych rodziców.
