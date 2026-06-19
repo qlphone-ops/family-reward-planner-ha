@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+- Naprawiono adresowanie akcji zapisu w Home Assistant Ingress. Aplikacja obsługuje teraz zarówno nowe adresy `/app/...`, jak i klasyczne `/api/hassio_ingress/...`, więc odznaczanie obowiązków nie zależy od wariantu adresu panelu Home Assistant.
+- Komunikaty błędów zapisu rozróżniają brak trasy, chwilową niedostępność aplikacji i błąd połączenia.
+
 ## 0.3.1
 
 - Przebudowano mobilną kartę obowiązków: zwarto ułożono nagłówek, dzień i saldo, a hero z postępem nie ma już pustego pola ze strzałką.
