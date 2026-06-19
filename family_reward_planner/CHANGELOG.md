@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+- Przebudowano responsywny układ sklepu: nagrody zawijają się w siatkę na większych ekranach, a na telefonie mają kompaktowy układ dotykowy.
+- Przeprojektowano szufladę kuponów: cena i status są teraz w osobnym obszarze, dzięki czemu długie opisy oraz badge nie wychodzą poza kafelek.
+- Uporządkowano mobilny nagłówek sklepu i komunikaty, aby nie zasłaniały treści na iPhone.
+
 ## 0.3.3
 
 - Naprawiono błąd, przez który każde kliknięcie w aplikacji uruchamiało przełączenie na tryb ciemny.
