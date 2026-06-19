@@ -2313,6 +2313,11 @@ button {
 :root[data-theme="dark"] .coupon,
 :root[data-theme="dark"] .parent-card,
 :root[data-theme="dark"] .form-card,
+:root[data-theme="dark"] .parent-stat-card,
+:root[data-theme="dark"] .child-admin-row,
+:root[data-theme="dark"] .reward-admin-row,
+:root[data-theme="dark"] .chore-admin-row,
+:root[data-theme="dark"] .child-history-row,
 :root[data-theme="dark"] .access-user-row,
 :root[data-theme="dark"] .school-free-row,
 :root[data-theme="dark"] .confirm-card,
@@ -2353,6 +2358,13 @@ button {
 :root[data-theme="dark"] .coupon-drawer {
   background: var(--card);
   border-color: var(--line);
+}
+
+:root[data-theme="dark"] .reward-admin-row .coupon-icon,
+:root[data-theme="dark"] .parent-menu-tile span,
+:root[data-theme="dark"] .history-dot,
+:root[data-theme="dark"] .period-mini {
+  background: color-mix(in srgb, var(--blue-soft) 72%, var(--card));
 }
 
 :root[data-theme="dark"] input,
@@ -2912,6 +2924,11 @@ button {
     min-height: 96px;
   }
 
+  .parent-requests-card,
+  .parent-menu-card {
+    min-height: 0;
+  }
+
   .parent-menu-tile {
     min-height: 76px;
   }
@@ -2947,6 +2964,11 @@ button {
 
   .chore-admin-row {
     grid-template-columns: 1fr;
+  }
+
+  .chore-admin-main,
+  .reward-admin-main {
+    min-width: 0;
   }
 
   .chore-order-tools,
@@ -3003,6 +3025,15 @@ button {
 
   .title-block h1 {
     font-size: 40px;
+  }
+
+  .parent-shell .title-block h1 {
+    font-size: 36px;
+  }
+
+  .parent-card,
+  .form-card {
+    padding: 16px;
   }
 
   .parent-entry {

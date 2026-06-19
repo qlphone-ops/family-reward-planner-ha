@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7
+
+- Panel rodzica może być widoczny w menu Home Assistant dla zwykłych użytkowników, a dostęp jest weryfikowany przez główną aplikację na podstawie wybranych rodziców.
+- Skrót nadal przekazuje specjalny nagłówek proxy, dzięki któremu pierwsza konfiguracja może odbyć się przez osobny moduł rodzica.
+
 ## 0.1.6
 
 - Dodano ikonę skrótu panelu rodzica widoczną na liście dodatków Home Assistant.

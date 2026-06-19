@@ -21,6 +21,9 @@ const initialState = {
   ],
   coupons: [],
   history: [],
+  completions: {},
+  dailyStars: {},
+  couponEvents: [],
 };
 
 const runtimeWindow = typeof window !== "undefined" ? window : {};
@@ -47,6 +50,7 @@ let observedUsers = runtimeWindow.__PLANNER_OPTIONS__?.observed_users || [];
 let selectedParentUsers = runtimeWindow.__PLANNER_OPTIONS__?.parent_users || [];
 let currentUser = runtimeWindow.__PLANNER_OPTIONS__?.current_user || null;
 const app = document.querySelector("#app");
+const PERIOD_IDS = ["morning", "after", "evening"];
 
 function childDesign(gender = "boy") {
   if (gender === "girl") {
@@ -80,8 +84,8 @@ function loadState() {
     if (runtimeWindow.__PLANNER_API__) {
       const serverState = normalizeState(structuredClone(runtimeWindow.__PLANNER_STATE__ || initialState));
       recoveredServerPayload = JSON.stringify(persistedStateFrom(serverState));
-      const pending = readPendingPayload();
-      return pending ? normalizeState(JSON.parse(pending)) : serverState;
+      clearPendingPayload(readPendingPayload());
+      return serverState;
     }
     if (runtimeWindow.__PLANNER_STATE__) {
       return normalizeState(structuredClone(runtimeWindow.__PLANNER_STATE__));
@@ -132,42 +136,8 @@ function saveState() {
     return Promise.resolve();
   }
 
-  writePendingPayload(payload);
-
-  if (payload === lastQueuedPayload) return saveQueue;
-
-  const payloadToSave = payload;
-  lastQueuedPayload = payloadToSave;
-  saveQueue = saveQueue
-    .catch(() => {})
-    .then(() => fetch(apiUrl("state"), {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: payloadToSave,
-      keepalive: payloadToSave.length < 60000,
-    }))
-    .then((response) => {
-      if (!response.ok) throw new Error("save failed");
-      lastSavedPayload = payloadToSave;
-      clearPendingPayload(payloadToSave);
-      saveErrorVisible = false;
-    })
-    .catch(() => {
-      if (lastQueuedPayload === payloadToSave) lastQueuedPayload = lastSavedPayload;
-      if (!saveErrorVisible) {
-        saveErrorVisible = true;
-        state.toast = "Nie udało się zapisać danych w Home Assistant";
-        render();
-        runtimeWindow.setTimeout(() => {
-          if (state.toast === "Nie udało się zapisać danych w Home Assistant") {
-            state.toast = "";
-            render();
-          }
-          saveErrorVisible = false;
-        }, 2600);
-      }
-    });
-
+  lastSavedPayload = payload;
+  lastQueuedPayload = payload;
   return saveQueue;
 }
 
@@ -182,20 +152,8 @@ function flushStateBeforeLeave() {
     return;
   }
 
-  writePendingPayload(payload);
-
-  const url = apiUrl("state");
-  if (payload.length < 60000 && runtimeWindow.navigator?.sendBeacon) {
-    const blob = new Blob([payload], { type: "application/json" });
-    if (runtimeWindow.navigator.sendBeacon(url, blob)) return;
-  }
-
-  fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: payload,
-    keepalive: payload.length < 60000,
-  }).catch(() => {});
+  lastSavedPayload = payload;
+  lastQueuedPayload = payload;
 }
 
 function parentPin() {
@@ -222,21 +180,85 @@ function apiUrl(name) {
   return `${base || ""}/api/${name}`;
 }
 
+function uid(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[char]));
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
+function actionErrorLabel(error) {
+  return ({
+    parent_action_forbidden: "Brak dostępu do panelu rodzica",
+    reward_not_available: "Ta nagroda nie jest dostępna",
+    not_enough_stars: "Za mało gwiazdek",
+    coupon_exists: "Taki kupon jest już w szufladzie",
+    coupon_not_ready: "Kupon nie jest gotowy do odbioru",
+    coupon_not_pending: "Kupon nie czeka na akceptację",
+    child_not_found: "Nie znaleziono dziecka",
+    task_not_found: "Nie znaleziono obowiązku na dziś",
+    invalid_chore: "Uzupełnij nazwę, dzieci i dni",
+    invalid_reward: "Uzupełnij nazwę i dzieci",
+    invalid_vacation_range: "Data końca musi być po dacie początku",
+  }[error] || "Nie udało się zapisać zmiany");
+}
+
+function applyServerState(nextState, options = {}) {
+  const currentView = options.view || state.view;
+  const currentChildId = options.childId || state.activeChildId;
+  const currentToast = state.toast;
+  state = normalizeState(nextState);
+  state.view = currentView;
+  state.activeChildId = currentChildId || state.activeChildId;
+  state.toast = options.message || currentToast;
+  const payload = JSON.stringify(persistedStateFrom(state));
+  lastSavedPayload = payload;
+  lastQueuedPayload = payload;
+  clearPendingPayload(payload);
+  render();
+}
+
+function runAction(type, payload = {}, options = {}) {
+  if (!runtimeWindow.__PLANNER_API__) {
+    return Promise.resolve(false);
+  }
+  const body = JSON.stringify({ type, payload });
+  return fetch(apiUrl("action"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+    keepalive: body.length < 60000,
+  })
+    .then((response) => response.json().then((body) => ({ response, body })).catch(() => ({ response, body: {} })))
+    .then(({ response, body }) => {
+      if (!response.ok) throw new Error(body.error || "action_failed");
+      applyServerState(body.state, {
+        view: options.view || state.view,
+        childId: options.childId || state.activeChildId,
+        message: options.message === false ? "" : (body.message || options.message || state.toast),
+      });
+      return true;
+    })
+    .catch((error) => {
+      showToast(actionErrorLabel(error.message));
+      return true;
+    });
+}
+
 function refreshStateFromServer() {
   if (!runtimeWindow.__PLANNER_API__ || lastQueuedPayload !== lastSavedPayload) return;
-  const pending = readPendingPayload();
-  if (pending && pending !== lastSavedPayload) {
-    const currentView = state.view;
-    const currentChildId = state.activeChildId;
-    const currentToast = state.toast;
-    state = normalizeState(JSON.parse(pending));
-    state.view = currentView;
-    state.activeChildId = currentChildId || state.activeChildId;
-    state.toast = currentToast;
-    lastQueuedPayload = lastSavedPayload;
-    render();
-    return;
-  }
+  clearPendingPayload(readPendingPayload());
   fetch(apiUrl("state"))
     .then((response) => (response.ok ? response.json() : null))
     .then((payload) => {
@@ -264,21 +286,26 @@ function applyTheme() {
 }
 
 function normalizeState(value) {
+  value = value && typeof value === "object" ? value : structuredClone(initialState);
   value.settings = {
     theme: value.settings?.theme === "dark" ? "dark" : "light",
   };
   value.children = value.children || {};
+  value.completions = value.completions && typeof value.completions === "object" ? value.completions : {};
+  value.dailyStars = value.dailyStars && typeof value.dailyStars === "object" ? value.dailyStars : {};
+  value.couponEvents = Array.isArray(value.couponEvents) ? value.couponEvents : [];
+  const todayKey = dateKey();
   Object.entries(value.children).forEach(([childId, child]) => {
     const inferredGender = child.gender || (String(child.name || "").toLowerCase().endsWith("a") ? "girl" : "boy");
     const design = childDesign(inferredGender);
     child.id = child.id || childId;
-    child.name = child.name || "Dziecko";
+    child.name = String(child.name || "Dziecko");
     child.gender = design.gender;
     child.accent = design.accent;
     child.soft = design.soft;
     child.avatarBg = design.avatarBg;
     child.hair = design.hair;
-    child.stars = Number.isFinite(child.stars) ? child.stars : 0;
+    child.stars = Number.isFinite(Number(child.stars)) ? Math.max(0, Number(child.stars)) : 0;
     child.tasks = { ...emptyTasks(), ...(child.tasks || {}) };
   });
   const childIds = Object.keys(value.children);
@@ -290,20 +317,46 @@ function normalizeState(value) {
   value.vacationRanges = value.vacationRanges || [];
   value.history = value.history || [];
   Object.values(value.children || {}).forEach((child) => {
-    child.starAwardedToday = Boolean(child.starAwardedToday);
     Object.entries(child.tasks || {}).forEach(([period, tasks]) => {
       tasks.forEach((task, index) => {
+        task.id = task.id || uid(`${child.id}-${period}`);
+        task.label = String(task.label || "Obowiązek");
         task.days = task.days?.length ? task.days : [1, 2, 3, 4, 5];
         task.groupId = task.groupId || stableTaskGroupId(period, task.label);
         task.order = Number.isFinite(task.order) ? task.order : periodIndex(period) * 100 + index;
+        if (task.done) {
+          value.completions[completionKey(child.id, task.id, todayKey)] = {
+            childId: child.id,
+            taskId: task.id,
+            groupId: task.groupId,
+            date: todayKey,
+            doneAt: Date.now(),
+          };
+        }
+        delete task.done;
       });
     });
+    if (child.starAwardedToday) {
+      value.dailyStars[dailyStarKey(child.id, todayKey)] = {
+        childId: child.id,
+        date: todayKey,
+        awardedAt: Date.now(),
+      };
+    }
+    delete child.starAwardedToday;
   });
   value.rewards = (value.rewards || initialState.rewards).map((reward) => ({
     ...reward,
+    id: String(reward.id || uid("reward")),
+    title: String(reward.title || "Nagroda"),
+    cost: Math.max(1, Number.isFinite(Number(reward.cost)) ? Number(reward.cost) : 1),
+    icon: String(reward.icon || "play"),
+    color: String(reward.color || "#315aa8"),
     childIds: reward.childIds?.length ? reward.childIds : childIds,
   }));
   value.coupons = value.coupons || [];
+  value.history = value.history.slice(0, 250);
+  value.couponEvents = value.couponEvents.slice(0, 250);
   return value;
 }
 
@@ -465,6 +518,22 @@ function excuseKey(childId, key = dateKey()) {
   return `${childId}:${key}`;
 }
 
+function completionKey(childId, taskId, key = dateKey()) {
+  return `${childId}:${key}:${taskId}`;
+}
+
+function dailyStarKey(childId, key = dateKey()) {
+  return `${childId}:${key}`;
+}
+
+function isTaskDone(child, task, key = dateKey()) {
+  return Boolean(state.completions?.[completionKey(child.id, task.id, key)]);
+}
+
+function hasDailyStar(child, key = dateKey()) {
+  return Boolean(state.dailyStars?.[dailyStarKey(child.id, key)]);
+}
+
 function isExcused(child) {
   return Boolean(state.dayExcuses?.[excuseKey(child.id)]);
 }
@@ -486,13 +555,13 @@ function allTasks(child, options = {}) {
 
 function taskStats(child) {
   const tasks = allTasks(child);
-  const done = tasks.filter((task) => task.done).length;
+  const done = tasks.filter((task) => isTaskDone(child, task)).length;
   return { done, total: tasks.length, remaining: Math.max(0, tasks.length - done) };
 }
 
 function periodStats(child, periodId) {
   const tasks = (child.tasks[periodId] || []).filter((task) => !isExcused(child) && taskAppliesToday(task));
-  const done = tasks.filter((task) => task.done).length;
+  const done = tasks.filter((task) => isTaskDone(child, task)).length;
   return { done, total: tasks.length };
 }
 
@@ -531,7 +600,7 @@ function toStarPhrase(count) {
 }
 
 function earnedPhrase(child) {
-  return `${child.name} ${child.gender === "girl" ? "zdobyła" : "zdobył"} gwiazdkę`;
+  return `${escapeHtml(child.name)} ${child.gender === "girl" ? "zdobyła" : "zdobył"} gwiazdkę`;
 }
 
 function styleVars(child, extra = "") {
@@ -698,12 +767,14 @@ function renderHomeChildCard(child) {
   const excused = isExcused(child);
   const emptyToday = !excused && stats.total === 0;
   const ready = stats.total > 0 && stats.remaining === 0;
+  const childName = escapeHtml(child.name);
+  const childId = escapeAttr(child.id);
   return `
-    <article class="child-card ${ready ? "child-card-complete" : ""}" ${styleVars(child)} data-card-child="${child.id}" tabindex="0" role="button" aria-label="Otwórz kartę ${child.name}">
+    <article class="child-card ${ready ? "child-card-complete" : ""}" ${styleVars(child)} data-card-child="${childId}" tabindex="0" role="button" aria-label="Otwórz kartę ${escapeAttr(child.name)}">
       <div class="child-head">
-        <div class="avatar"><div class="profile-mark">${child.name.charAt(0)}</div></div>
+        <div class="avatar"><div class="profile-mark">${escapeHtml(child.name.charAt(0))}</div></div>
         <div>
-          <h2 class="child-name">${child.name}</h2>
+          <h2 class="child-name">${childName}</h2>
           <div class="child-meta">${excused ? "usprawiedliwiony" : ready ? "gwiazdka zdobyta" : "w trakcie"}</div>
         </div>
         ${renderStarToken(child)}
@@ -719,7 +790,7 @@ function renderHomeChildCard(child) {
       <div class="period-summary">
         ${periods().map((period) => {
           const p = periodStats(child, period.id);
-          return `<button class="period-row" data-child="${child.id}">
+          return `<button class="period-row" data-child="${childId}">
             <span class="period-mini period-${period.art}" style="--accent:${period.accent}"><span></span></span>
             <span>${period.title}</span>
             <span class="count-pill">${p.done}/${p.total}</span>
@@ -746,14 +817,15 @@ function renderChild(child) {
   const excused = isExcused(child);
   const emptyToday = !excused && stats.total === 0;
   const complete = stats.total > 0 && stats.remaining === 0;
-  const hero = excused ? `${child.name} ma dzień usprawiedliwiony` : emptyToday ? `${child.name} nie ma dziś obowiązków` : complete ? earnedPhrase(child) : `${child.name}, ${remainingPhrase(stats.remaining)}`;
+  const childName = escapeHtml(child.name);
+  const hero = excused ? `${childName} ma dzień usprawiedliwiony` : emptyToday ? `${childName} nie ma dziś obowiązków` : complete ? earnedPhrase(child) : `${childName}, ${remainingPhrase(stats.remaining)}`;
   return `
     <section class="screen">
       <div class="topbar">
         <div style="display:flex;align-items:center;gap:22px">
           <button class="back-button" data-view="home">‹</button>
           <div class="title-block">
-            <h1>Karta: ${child.name}</h1>
+            <h1>Karta: ${childName}</h1>
             <p>Dzisiaj: ${stats.done} z ${stats.total} obowiązków</p>
           </div>
         </div>
@@ -761,7 +833,7 @@ function renderChild(child) {
       </div>
       ${renderChildMenu("child")}
       <div class="hero-card ${complete ? "hero-card-complete" : ""}" ${styleVars(child)}>
-        <div class="avatar"><div class="profile-mark">${child.name.charAt(0)}</div></div>
+        <div class="avatar"><div class="profile-mark">${escapeHtml(child.name.charAt(0))}</div></div>
         <div class="hero-copy">
           <h2>${hero}</h2>
           <p>${excused ? "Dzisiaj nie liczymy obowiązków ani gwiazdki." : emptyToday ? "Rodzic może dodać obowiązki na ten dzień tygodnia." : complete ? "Wszystkie obowiązki są zrobione." : "Po skończeniu całego dnia wpada jedna gwiazdka."}</p>
@@ -779,7 +851,7 @@ function renderChild(child) {
       </div>
       ${renderChildHistory(child)}
       <div class="bottom-strip">
-        <span>${excused ? "Dzień jest usprawiedliwiony przez rodzica." : emptyToday ? "Na dziś nie ma przypisanych obowiązków." : complete ? `Brawo ${child.name}. Dzisiejsza gwiazdka jest zdobyta.` : "Dobra robota. Zostały jeszcze drobiazgi."}</span>
+        <span>${excused ? "Dzień jest usprawiedliwiony przez rodzica." : emptyToday ? "Na dziś nie ma przypisanych obowiązków." : complete ? `Brawo ${childName}. Dzisiejsza gwiazdka jest zdobyta.` : "Dobra robota. Zostały jeszcze drobiazgi."}</span>
         <span>
           <button class="secondary" data-view="home">Panel</button>
           <button class="primary" data-view="shop">Sklep</button>
@@ -804,8 +876,8 @@ function renderChildHistory(child) {
           <div class="child-history-row history-${entry.type || "event"}">
             <span class="history-dot">${historyIcon(entry.type)}</span>
             <span>
-              <strong>${entry.title}</strong>
-              <small>${formatDateTime(entry.happenedAt)} · ${entry.note}</small>
+              <strong>${escapeHtml(entry.title)}</strong>
+              <small>${formatDateTime(entry.happenedAt)} · ${escapeHtml(entry.note)}</small>
             </span>
           </div>
         `).join("") : `<div class="empty-row">Historia pojawi się po odznaczeniu obowiązków i zdobyciu gwiazdek.</div>`}
@@ -815,7 +887,7 @@ function renderChildHistory(child) {
 }
 
 function renderRewardHistory(child) {
-  const entries = filteredHistory(child.id, ["reward"]);
+  const entries = filteredCouponEvents(child.id);
   return `
     <section class="child-history-panel reward-history-panel">
       <div class="section-title child-history-title">
@@ -826,10 +898,10 @@ function renderRewardHistory(child) {
       <div class="child-history-list">
         ${entries.length ? entries.map((entry) => `
           <div class="child-history-row history-reward">
-            <span class="history-dot">${historyIcon(entry.type)}</span>
+            <span class="history-dot">${historyIcon("reward")}</span>
             <span>
-              <strong>${entry.title}</strong>
-              <small>${formatDateTime(entry.happenedAt)} · ${entry.note}</small>
+              <strong>${escapeHtml(entry.title)}</strong>
+              <small>${formatDateTime(entry.happenedAt)} · ${escapeHtml(entry.note)}</small>
             </span>
           </div>
         `).join("") : `<div class="empty-row">Historia kuponów pojawi się po zamówieniu lub odebraniu nagrody.</div>`}
@@ -861,6 +933,28 @@ function filteredHistory(childId, types) {
     .filter((entry) => Number.isFinite(maxAge) ? now - Number(entry.happenedAt || 0) <= maxAge : true);
 }
 
+function filteredCouponEvents(childId) {
+  const now = Date.now();
+  const maxAge = historyFilterDays === "all" ? Infinity : Number(historyFilterDays) * 24 * 60 * 60 * 1000;
+  return (state.couponEvents || [])
+    .filter((entry) => entry.childId === childId)
+    .filter((entry) => Number.isFinite(maxAge) ? now - Number(entry.happenedAt || 0) <= maxAge : true)
+    .map((entry) => {
+      const reward = rewardById(entry.rewardId);
+      const label = {
+        requested: "Kupon zamówiony",
+        approved: "Kupon zatwierdzony",
+        rejected: "Kupon odrzucony",
+        redeemed: "Kupon odebrany",
+      }[entry.action] || "Zdarzenie kuponu";
+      return {
+        ...entry,
+        title: reward ? `${label}: ${reward.title}` : label,
+        note: entry.note || "",
+      };
+    });
+}
+
 function historyIcon(type) {
   if (type === "task") return "✓";
   if (type === "star") return "★";
@@ -878,12 +972,15 @@ function renderTaskSection(child, period) {
         <span class="count-pill">${stats.done}/${stats.total}</span>
       </div>
       <div class="task-list">
-        ${tasks.length ? tasks.map((task) => `
-          <button class="task-row ${task.done ? "done" : ""}" data-task="${task.id}" data-period="${period.id}">
-            <span class="check">${task.done ? "✓" : ""}</span>
-            <span>${task.label}</span>
+        ${tasks.length ? tasks.map((task) => {
+          const done = isTaskDone(child, task);
+          return `
+          <button class="task-row ${done ? "done" : ""}" data-task="${escapeAttr(task.id)}" data-period="${escapeAttr(period.id)}">
+            <span class="check">${done ? "✓" : ""}</span>
+            <span>${escapeHtml(task.label)}</span>
           </button>
-        `).join("") : `<div class="empty-row">${isExcused(child) ? "Dzień usprawiedliwiony" : "Brak obowiązków na dziś"}</div>`}
+        `;
+        }).join("") : `<div class="empty-row">${isExcused(child) ? "Dzień usprawiedliwiony" : "Brak obowiązków na dziś"}</div>`}
       </div>
     </section>
   `;
@@ -892,11 +989,12 @@ function renderTaskSection(child, period) {
 function renderShop(child) {
   const coupons = state.coupons.filter((coupon) => coupon.childId === child.id && !["rejected", "used"].includes(coupon.status));
   const rewards = state.rewards.filter((reward) => rewardAppliesToChild(reward, child.id));
+  const childName = escapeHtml(child.name);
   return `
     <section class="screen">
       <div class="topbar">
         <div class="title-block">
-          <h1>Sklep nagród: ${child.name}</h1>
+          <h1>Sklep nagród: ${childName}</h1>
           <p>Wybierz nagrodę</p>
         </div>
         <div class="badge balance-badge">
@@ -939,10 +1037,10 @@ function renderReward(child, reward) {
   if (pending) status = { label: "Czeka na rodzica", tone: "pending" };
   if (ready) status = { label: "Gotowe do odebrania", tone: "ready" };
   return `
-    <button class="reward-card ${canBuy || pending || ready ? "" : "disabled"}" style="--accent:${reward.color};--soft:${reward.id === "game30" ? "#f2edff" : "#eef9f1"}" data-reward="${reward.id}">
+    <button class="reward-card ${canBuy || pending || ready ? "" : "disabled"}" style="--accent:${escapeAttr(reward.color)};--soft:${reward.id === "game30" ? "#f2edff" : "#eef9f1"}" data-reward="${escapeAttr(reward.id)}">
       <span class="price-badge">${reward.cost} ★</span>
       <div class="reward-art">${icon(reward.icon)}</div>
-      <h3>${reward.title}</h3>
+      <h3>${escapeHtml(reward.title)}</h3>
       <span class="status-badge status-${status.tone}">${status.label}</span>
     </button>
   `;
@@ -955,9 +1053,9 @@ function renderCoupon(coupon) {
   const statusTone = coupon.status === "pending" ? "pending" : coupon.status === "ready" ? "ready" : "used";
   const note = coupon.status === "pending" ? "Czeka na decyzje rodzica" : coupon.status === "ready" ? "Gotowe do odebrania" : "Trafiło do historii";
   return `
-    <button class="coupon ${coupon.status === "ready" ? "ready" : ""}" data-coupon="${coupon.id}">
+    <button class="coupon ${coupon.status === "ready" ? "ready" : ""}" data-coupon="${escapeAttr(coupon.id)}">
       <span class="coupon-icon">${icon(reward.icon)}</span>
-      <span><h4>${reward.title}</h4><small>${note}</small></span>
+      <span><h4>${escapeHtml(reward.title)}</h4><small>${note}</small></span>
       <span class="price-badge">${reward.cost} ★</span>
       <span class="status-badge status-${statusTone}">${statusLabel}</span>
     </button>
@@ -982,10 +1080,10 @@ function renderRedeemConfirm() {
         <span class="coupon-icon">${icon(reward.icon)}</span>
         <div>
           <h2>Odebrać kupon?</h2>
-          <p>${reward.title} zostanie przeniesione do historii.</p>
+          <p>${escapeHtml(reward.title)} zostanie przeniesione do historii.</p>
           <div class="confirm-actions">
             <button class="secondary" data-cancel-redeem>Anuluj</button>
-            <button class="primary" data-confirm-redeem="${coupon.id}">Potwierdź odbiór</button>
+            <button class="primary" data-confirm-redeem="${escapeAttr(coupon.id)}">Potwierdź odbiór</button>
           </div>
         </div>
       </div>
@@ -1102,6 +1200,10 @@ function renderParentMenuButton(view, title, note, symbol) {
 }
 
 function setTheme(theme) {
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("set_theme", { theme }, { view: state.view });
+    return;
+  }
   state.settings = state.settings || {};
   state.settings.theme = theme === "dark" ? "dark" : "light";
   showToast(state.settings.theme === "dark" ? "Tryb ciemny włączony" : "Tryb jasny włączony");
@@ -1144,26 +1246,28 @@ function renderChildrenAdmin() {
 }
 
 function renderChildAdminRow(child) {
+  const childId = escapeAttr(child.id);
+  const childName = escapeHtml(child.name);
   return `
     <div class="child-admin-row" ${styleVars(child)}>
-      <div class="avatar compact-avatar"><div class="profile-mark">${child.name.charAt(0)}</div></div>
+      <div class="avatar compact-avatar"><div class="profile-mark">${escapeHtml(child.name.charAt(0))}</div></div>
       <div class="child-admin-main">
         <div class="reward-row-top child-row-top">
-          <div class="field compact-field"><label>Imię</label><input data-child-name="${child.id}" value="${child.name}" /></div>
+          <div class="field compact-field"><label>Imię</label><input data-child-name="${childId}" value="${escapeAttr(child.name)}" /></div>
           <div class="field compact-field">
             <label>Styl</label>
-            <select data-child-gender="${child.id}">
+            <select data-child-gender="${childId}">
               <option value="boy" ${child.gender === "boy" ? "selected" : ""}>Chłopiec</option>
               <option value="girl" ${child.gender === "girl" ? "selected" : ""}>Dziewczynka</option>
             </select>
           </div>
-          <div class="field compact-field"><label>Gwiazdki</label><input data-child-stars="${child.id}" type="number" min="0" value="${child.stars}" /></div>
+          <div class="field compact-field"><label>Gwiazdki</label><input data-child-stars="${childId}" type="number" min="0" value="${child.stars}" /></div>
         </div>
-        <p class="child-meta">Styl karty: ${child.gender === "girl" ? "dziewczynka" : "chłopiec"}</p>
+        <p class="child-meta">${childName} · styl karty: ${child.gender === "girl" ? "dziewczynka" : "chłopiec"}</p>
       </div>
       <div class="reward-row-actions">
-        <button class="primary" data-save-child="${child.id}">Zapisz</button>
-        <button class="danger" data-delete-child="${child.id}">Usuń</button>
+        <button class="primary" data-save-child="${childId}">Zapisz</button>
+        <button class="danger" data-delete-child="${childId}">Usuń</button>
       </div>
     </div>
   `;
@@ -1186,21 +1290,21 @@ function renderAccessAdmin() {
           <div class="access-user-list">
             ${users.length ? users.map((user) => `
               <label class="access-user-row">
-                <input type="checkbox" name="parentUsers" value="${user.id}" ${selected.has(String(user.id).toLowerCase()) ? "checked" : ""} />
+                <input type="checkbox" name="parentUsers" value="${escapeAttr(user.id)}" ${selected.has(String(user.id).toLowerCase()) ? "checked" : ""} />
                 <span>
-                  <strong>${user.label || user.id}</strong>
+                  <strong>${escapeHtml(user.label || user.id)}</strong>
                   <small>
-                    ${[
+                    ${escapeHtml([
                       currentUser?.id === user.id ? "bieżący użytkownik" : "",
                       user.isOwner ? "właściciel HA" : "",
                       user.isAdmin ? "administrator HA" : "",
                       user.username ? `login: ${user.username}` : "",
                       !homeAssistantUsers.length && user.lastSeenAt ? `ostatnio widziany: ${formatDateTime(user.lastSeenAt)}` : "",
-                    ].filter(Boolean).join(" · ") || "konto Home Assistant"}
+                    ].filter(Boolean).join(" · ") || "konto Home Assistant")}
                   </small>
                 </span>
               </label>
-            `).join("") : `<div class="empty-row">Nie udało się pobrać listy użytkowników Home Assistant. ${homeAssistantUsersError || "Sprawdź uprawnienie homeassistant_api i odśwież aplikację po aktualizacji."}</div>`}
+            `).join("") : `<div class="empty-row">Nie udało się pobrać listy użytkowników Home Assistant. ${escapeHtml(homeAssistantUsersError || "Sprawdź uprawnienie homeassistant_api i odśwież aplikację po aktualizacji.")}</div>`}
           </div>
           <button class="primary">Zapisz rodziców</button>
         </form>
@@ -1219,13 +1323,13 @@ function renderParentRequest(coupon) {
     <div class="parent-card request-card">
       <span class="coupon-icon">${icon(reward.icon)}</span>
       <div>
-        <h2>${child.name}: ${reward.title}</h2>
+        <h2>${escapeHtml(child.name)}: ${escapeHtml(reward.title)}</h2>
         <p class="child-meta">${reward.cost} ${starWord(reward.cost)} · ${formatDateTime(coupon.createdAt)}</p>
         <span class="status-badge status-pending">Czeka na rodzica</span>
       </div>
       <div class="confirm-actions">
-        <button class="secondary" data-reject="${coupon.id}">Odrzuć</button>
-        <button class="primary" data-approve="${coupon.id}">Zatwierdz</button>
+        <button class="secondary" data-reject="${escapeAttr(coupon.id)}">Odrzuć</button>
+        <button class="primary" data-approve="${escapeAttr(coupon.id)}">Zatwierdz</button>
       </div>
     </div>
   `;
@@ -1242,8 +1346,8 @@ function renderEdit() {
           <h2>Dodaj obowiązek</h2>
           <form class="stack" data-edit-form>
             <input name="label" required placeholder="Nazwa obowiązku" />
-            <select name="period">${periods().map((period) => `<option value="${period.id}">${period.title}</option>`).join("")}</select>
-            <div class="child-picker">${Object.values(state.children).map((child) => `<label><input type="checkbox" name="children" value="${child.id}" checked /> ${child.name}</label>`).join("")}</div>
+            <select name="period">${periods().map((period) => `<option value="${escapeAttr(period.id)}">${period.title}</option>`).join("")}</select>
+            <div class="child-picker">${Object.values(state.children).map((child) => `<label><input type="checkbox" name="children" value="${escapeAttr(child.id)}" checked /> ${escapeHtml(child.name)}</label>`).join("")}</div>
             ${renderDayCheckboxes(weekDays())}
             <button class="primary">Dodaj</button>
           </form>
@@ -1267,17 +1371,18 @@ function renderEdit() {
 }
 
 function renderChoreAdminRow(group, index, total) {
+  const groupId = escapeAttr(group.id);
   return `
-    <div class="chore-admin-row" data-chore-row="${group.id}">
+    <div class="chore-admin-row" data-chore-row="${groupId}">
       <div class="chore-order-tools">
-        <button class="ghost icon-action" data-move-chore="${group.id}" data-direction="-1" ${index === 0 ? "disabled" : ""} aria-label="Przesuń wyżej">↑</button>
-        <button class="ghost icon-action" data-move-chore="${group.id}" data-direction="1" ${index === total - 1 ? "disabled" : ""} aria-label="Przesuń niżej">↓</button>
+        <button class="ghost icon-action" data-move-chore="${groupId}" data-direction="-1" ${index === 0 ? "disabled" : ""} aria-label="Przesuń wyżej">↑</button>
+        <button class="ghost icon-action" data-move-chore="${groupId}" data-direction="1" ${index === total - 1 ? "disabled" : ""} aria-label="Przesuń niżej">↓</button>
       </div>
       <div class="chore-admin-main">
         <div class="chore-row-top">
-          <input value="${group.label}" data-chore-label="${group.id}" />
-          <select data-chore-period="${group.id}">
-            ${periods().map((period) => `<option value="${period.id}" ${period.id === group.periodId ? "selected" : ""}>${period.title}</option>`).join("")}
+          <input value="${escapeAttr(group.label)}" data-chore-label="${groupId}" />
+          <select data-chore-period="${groupId}">
+            ${periods().map((period) => `<option value="${escapeAttr(period.id)}" ${period.id === group.periodId ? "selected" : ""}>${period.title}</option>`).join("")}
           </select>
         </div>
         <div class="chore-admin-meta">
@@ -1285,13 +1390,13 @@ function renderChoreAdminRow(group, index, total) {
           <span class="child-meta">${daysLabel(group.days)}</span>
         </div>
         <div class="child-picker chore-child-picker">
-          ${Object.values(state.children).map((child) => `<label><input type="checkbox" data-chore-child="${group.id}" value="${child.id}" ${group.childIds.includes(child.id) ? "checked" : ""} /> ${child.name}</label>`).join("")}
+          ${Object.values(state.children).map((child) => `<label><input type="checkbox" data-chore-child="${groupId}" value="${escapeAttr(child.id)}" ${group.childIds.includes(child.id) ? "checked" : ""} /> ${escapeHtml(child.name)}</label>`).join("")}
         </div>
         ${renderChoreDayCheckboxes(group)}
       </div>
       <div class="chore-row-actions">
-        <button class="primary" data-save-chore-group="${group.id}">Zapisz</button>
-        <button class="danger" data-delete-chore-group="${group.id}">Usuń</button>
+        <button class="primary" data-save-chore-group="${groupId}">Zapisz</button>
+        <button class="danger" data-delete-chore-group="${groupId}">Usuń</button>
       </div>
     </div>
   `;
@@ -1312,7 +1417,7 @@ function renderRewardsAdmin() {
               <div class="field"><label>Koszt</label><input name="cost" required type="number" min="1" value="1" /></div>
               <div class="field"><label>Typ</label>${renderRewardIconSelect("icon")}</div>
             </div>
-            <div class="child-picker">${Object.values(state.children).map((child) => `<label><input type="checkbox" name="children" value="${child.id}" checked /> ${child.name}</label>`).join("")}</div>
+            <div class="child-picker">${Object.values(state.children).map((child) => `<label><input type="checkbox" name="children" value="${escapeAttr(child.id)}" checked /> ${escapeHtml(child.name)}</label>`).join("")}</div>
             <button class="primary">Dodaj nagrodę</button>
           </form>
         </div>
@@ -1340,23 +1445,24 @@ function renderRewardIconSelect(name, selected = "play", dataAttr = "") {
 }
 
 function renderRewardAdminRow(reward) {
+  const rewardId = escapeAttr(reward.id);
   return `
     <div class="reward-admin-row">
       <span class="coupon-icon">${icon(reward.icon)}</span>
       <div class="reward-admin-main">
         <div class="reward-row-top">
-          <div class="field compact-field"><label>Nazwa</label><input data-reward-title="${reward.id}" value="${reward.title}" aria-label="Nazwa nagrody" /></div>
-          <div class="field compact-field"><label>Koszt</label><input data-reward-cost="${reward.id}" type="number" min="1" value="${reward.cost}" aria-label="Koszt nagrody" /></div>
-          <div class="field compact-field"><label>Typ</label>${renderRewardIconSelect("reward-icon", reward.icon, `data-reward-icon="${reward.id}" aria-label="Typ nagrody"`)}</div>
+          <div class="field compact-field"><label>Nazwa</label><input data-reward-title="${rewardId}" value="${escapeAttr(reward.title)}" aria-label="Nazwa nagrody" /></div>
+          <div class="field compact-field"><label>Koszt</label><input data-reward-cost="${rewardId}" type="number" min="1" value="${reward.cost}" aria-label="Koszt nagrody" /></div>
+          <div class="field compact-field"><label>Typ</label>${renderRewardIconSelect("reward-icon", reward.icon, `data-reward-icon="${rewardId}" aria-label="Typ nagrody"`)}</div>
         </div>
         <div class="reward-admin-meta">
           <span class="status-badge">${reward.cost} ${starWord(reward.cost)}</span>
-          <div class="child-picker reward-child-picker">${Object.values(state.children).map((child) => `<label><input type="checkbox" data-reward-child="${reward.id}" value="${child.id}" ${rewardAppliesToChild(reward, child.id) ? "checked" : ""} /> ${child.name}</label>`).join("")}</div>
+          <div class="child-picker reward-child-picker">${Object.values(state.children).map((child) => `<label><input type="checkbox" data-reward-child="${rewardId}" value="${escapeAttr(child.id)}" ${rewardAppliesToChild(reward, child.id) ? "checked" : ""} /> ${escapeHtml(child.name)}</label>`).join("")}</div>
         </div>
       </div>
       <div class="reward-row-actions">
-        <button class="primary" data-save-reward-children="${reward.id}">Zapisz</button>
-        <button class="danger" data-delete-reward="${reward.id}">Usuń</button>
+        <button class="primary" data-save-reward-children="${rewardId}">Zapisz</button>
+        <button class="danger" data-delete-reward="${rewardId}">Usuń</button>
       </div>
     </div>
   `;
@@ -1400,9 +1506,9 @@ function renderDayAdmin() {
               <div class="school-free-row">
                 <div>
                   <strong>${formatDateLabel(key)}</strong>
-                  <small>${item.note || "dzień wolny od szkoły"}</small>
+                  <small>${escapeHtml(item.note || "dzień wolny od szkoły")}</small>
                 </div>
-                <button class="ghost" data-delete-school-day="${key}">Usuń</button>
+                <button class="ghost" data-delete-school-day="${escapeAttr(key)}">Usuń</button>
               </div>
             `).join("") : `<div class="empty-row">Brak ręcznie oznaczonych dni wolnych.</div>`}
           </div>
@@ -1414,9 +1520,9 @@ function renderDayAdmin() {
               <div class="school-free-row">
                 <div>
                   <strong>${formatDateLabel(range.start)} - ${formatDateLabel(range.end)}</strong>
-                  <small>${range.note || "wakacje"}</small>
+                  <small>${escapeHtml(range.note || "wakacje")}</small>
                 </div>
-                <button class="ghost" data-delete-vacation="${range.id}">Usuń</button>
+                <button class="ghost" data-delete-vacation="${escapeAttr(range.id)}">Usuń</button>
               </div>
             `).join("") : `<div class="empty-row">Brak zapisanych okresów wakacji.</div>`}
           </div>
@@ -1425,9 +1531,9 @@ function renderDayAdmin() {
       <div class="grid-2" style="margin-top:24px">
         ${Object.values(state.children).map((child) => `
           <div class="parent-card">
-            <h2>${child.name}</h2>
+            <h2>${escapeHtml(child.name)}</h2>
             <p class="child-meta">Dzisiaj: ${dayName()}, ${childDayLabel(child)}</p>
-            <button class="${isExcused(child) ? "danger" : "primary"}" data-toggle-excuse="${child.id}">
+            <button class="${isExcused(child) ? "danger" : "primary"}" data-toggle-excuse="${escapeAttr(child.id)}">
               ${isExcused(child) ? "Cofnij usprawiedliwienie" : "Usprawiedliw dzień"}
             </button>
           </div>
@@ -1446,9 +1552,9 @@ function renderHistory() {
       <div class="stack" style="margin-top:24px">
         ${state.history.length ? state.history.map((entry) => `
           <div class="parent-card">
-            <h2>${entry.title}</h2>
+            <h2>${escapeHtml(entry.title)}</h2>
             <p class="child-meta">${formatDateTime(entry.happenedAt)}</p>
-            <p>${entry.note}</p>
+            <p>${escapeHtml(entry.note)}</p>
           </div>
         `).join("") : `<div class="parent-card"><h2>Brak historii</h2><p class="child-meta">Akcje pojawią się po odbiórze kuponów lub decyzjach rodzica.</p></div>`}
       </div>
@@ -1486,14 +1592,14 @@ function renderChoreDayCheckboxes(group) {
       <div class="day-pills-main">
         ${allWeekDays().filter((day) => day !== 7).map((day) => `
           <label class="day-pill">
-            <input type="checkbox" value="${day}" data-chore-day="${group.id}" ${selected.has(day) ? "checked" : ""} />
+            <input type="checkbox" value="${day}" data-chore-day="${escapeAttr(group.id)}" ${selected.has(day) ? "checked" : ""} />
             <span>${dayShortName(day)}</span>
           </label>
         `).join("")}
       </div>
       <div class="vacation-pill-row">
         <label class="day-pill vacation-day-pill">
-          <input type="checkbox" value="7" data-chore-day="${group.id}" ${selected.has(7) ? "checked" : ""} />
+          <input type="checkbox" value="7" data-chore-day="${escapeAttr(group.id)}" ${selected.has(7) ? "checked" : ""} />
           <span>Wakacje</span>
         </label>
       </div>
@@ -1611,21 +1717,29 @@ function unlockParent(event) {
 function toggleTask(period, taskId) {
   const child = activeChild();
   if (!child) return;
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("toggle_task", { childId: child.id, period, taskId, date: dateKey() }, { view: "child", childId: child.id });
+    return;
+  }
   const task = child.tasks[period].find((item) => item.id === taskId);
   if (!task) return;
-  task.done = !task.done;
-  addHistory(child.id, task.done ? "Obowiązek wykonany" : "Obowiązek cofnięty", task.label, "task");
+  const key = completionKey(child.id, task.id);
+  const wasDone = Boolean(state.completions[key]);
+  if (wasDone) delete state.completions[key];
+  else state.completions[key] = { childId: child.id, taskId: task.id, groupId: task.groupId, date: dateKey(), doneAt: Date.now() };
+  addHistory(child.id, wasDone ? "Obowiązek cofnięty" : "Obowiązek wykonany", task.label, "task");
   const stats = taskStats(child);
-  if (stats.remaining === 0 && !child.starAwardedToday && stats.total > 0) {
+  const sKey = dailyStarKey(child.id);
+  if (stats.remaining === 0 && !state.dailyStars[sKey] && stats.total > 0) {
     child.stars += 1;
-    child.starAwardedToday = true;
+    state.dailyStars[sKey] = { childId: child.id, date: dateKey(), awardedAt: Date.now() };
     addHistory(child.id, "Gwiazdka przyznana", "Wszystkie dzisiejsze obowiązki są wykonane", "star");
     showToast(`${child.name} zdobywa gwiazdkę za cały dzień`);
     return;
   }
-  if (stats.remaining > 0 && child.starAwardedToday) {
+  if (stats.remaining > 0 && state.dailyStars[sKey]) {
     child.stars = Math.max(0, child.stars - 1);
-    child.starAwardedToday = false;
+    delete state.dailyStars[sKey];
     addHistory(child.id, "Gwiazdka cofnięta", "Dzień nie jest już kompletny", "star");
     showToast("Gwiazdka cofnięta, bo dzień nie jest już kompletny");
     return;
@@ -1636,6 +1750,10 @@ function toggleTask(period, taskId) {
 function requestReward(rewardId) {
   const child = activeChild();
   if (!child) return;
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("request_reward", { childId: child.id, rewardId }, { view: "shop", childId: child.id });
+    return;
+  }
   const reward = rewardById(rewardId);
   if (!reward) return showToast("Nie znaleziono nagrody");
   if (!rewardAppliesToChild(reward, child.id)) return showToast("Ta nagroda nie jest dostępna dla tego dziecka");
@@ -1648,6 +1766,10 @@ function requestReward(rewardId) {
 }
 
 function approveCoupon(couponId) {
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("approve_coupon", { couponId }, { view: "parent" });
+    return;
+  }
   const coupon = state.coupons.find((item) => item.id === couponId);
   if (!coupon || coupon.status !== "pending") return;
   const child = childById(coupon.childId);
@@ -1663,6 +1785,10 @@ function approveCoupon(couponId) {
 }
 
 function rejectCoupon(couponId) {
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("reject_coupon", { couponId }, { view: "parent" });
+    return;
+  }
   const coupon = state.coupons.find((item) => item.id === couponId);
   if (!coupon) return;
   const child = childById(coupon.childId);
@@ -1694,6 +1820,12 @@ function handleCoupon(couponId) {
 }
 
 function redeemCoupon(couponId) {
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("redeem_coupon", { couponId }, { view: "shop", childId: state.activeChildId }).then(() => {
+      redeemConfirmId = "";
+    });
+    return;
+  }
   const coupon = state.coupons.find((item) => item.id === couponId);
   if (!coupon || coupon.status !== "ready") return;
   const reward = rewardById(coupon.rewardId);
@@ -1720,7 +1852,6 @@ function createChild(name, gender) {
     name,
     ...design,
     stars: 0,
-    starAwardedToday: false,
     tasks: emptyTasks(),
   };
 }
@@ -1731,6 +1862,10 @@ function saveChild(event) {
   const name = String(data.get("name") || "").trim();
   const gender = String(data.get("gender") || "boy");
   if (!name) return showToast("Podaj imię dziecka");
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("add_child", { name, gender }, { view: "childrenAdmin" });
+    return;
+  }
   const child = createChild(name, gender);
   state.children[child.id] = child;
   state.activeChildId = state.activeChildId || child.id;
@@ -1748,6 +1883,10 @@ function saveChildSettings(childId) {
   const gender = String(document.querySelector(`[data-child-gender="${childId}"]`)?.value || "boy");
   const stars = Math.max(0, Number(document.querySelector(`[data-child-stars="${childId}"]`)?.value || 0));
   if (!name) return showToast("Podaj imię dziecka");
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("save_child", { childId, name, gender, stars }, { view: "childrenAdmin", childId: state.activeChildId });
+    return;
+  }
   const design = childDesign(gender);
   Object.assign(child, design, { name, stars });
   showToast("Dziecko zapisane");
@@ -1756,6 +1895,10 @@ function saveChildSettings(childId) {
 function deleteChild(childId) {
   const child = childById(childId);
   if (!child) return;
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("delete_child", { childId }, { view: "childrenAdmin" });
+    return;
+  }
   delete state.children[childId];
   state.rewards.forEach((reward) => {
     reward.childIds = (reward.childIds || []).filter((id) => id !== childId);
@@ -1801,6 +1944,10 @@ function saveChore(event) {
   const childIds = data.getAll("children");
   const days = data.getAll("days").map(Number);
   if (!label || !childIds.length || !days.length) return showToast("Uzupełnij nazwę, dzieci i dni");
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("add_chore", { label, period, childIds, days }, { view: "edit" });
+    return;
+  }
   const groupId = `chore-${Date.now()}-${slugify(label)}`;
   const order = nextChoreOrder();
   childIds.forEach((childId) => {
@@ -1817,6 +1964,10 @@ function saveReward(event) {
   const cost = Math.max(1, Number(data.get("cost") || 1));
   const childIds = data.getAll("children");
   if (!title || !childIds.length) return showToast("Uzupełnij nazwę i dzieci");
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("add_reward", { title, cost, icon: String(data.get("icon") || "play"), childIds }, { view: "rewardsAdmin" });
+    return;
+  }
   state.rewards.push({
     id: `reward-${Date.now()}`,
     title,
@@ -1835,6 +1986,10 @@ function saveChoreGroup(groupId) {
   const days = Array.from(document.querySelectorAll(`[data-chore-day="${groupId}"]:checked`)).map((input) => Number(input.value));
   const current = choreGroups().find((group) => group.id === groupId);
   if (!label || !childIds.length || !days.length || !current) return showToast("Uzupełnij nazwę, dzieci i dni");
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("save_chore_group", { groupId, label, period, childIds, days }, { view: "edit" });
+    return;
+  }
 
   Object.values(state.children).forEach((child) => {
     const existing = findTaskByGroup(child, groupId);
@@ -1861,11 +2016,19 @@ function saveChoreGroup(groupId) {
 }
 
 function deleteChoreGroup(groupId) {
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("delete_chore_group", { groupId }, { view: "edit" });
+    return;
+  }
   Object.values(state.children).forEach((child) => removeTaskByGroup(child, groupId));
   showToast("Obowiązek usunięty");
 }
 
 function moveChoreGroup(groupId, direction) {
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("move_chore_group", { groupId, direction }, { view: "edit" });
+    return;
+  }
   const groups = choreGroups();
   const index = groups.findIndex((group) => group.id === groupId);
   const next = index + direction;
@@ -1894,6 +2057,10 @@ function sortTasksByOrder() {
 }
 
 function deleteReward(rewardId) {
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("delete_reward", { rewardId }, { view: "rewardsAdmin" });
+    return;
+  }
   state.rewards = state.rewards.filter((reward) => reward.id !== rewardId);
   state.coupons = state.coupons.filter((coupon) => coupon.rewardId !== rewardId);
   showToast("Nagroda usunięta");
@@ -1906,15 +2073,24 @@ function saveRewardChildren(rewardId) {
   const cost = Math.max(1, Number(document.querySelector(`[data-reward-cost="${rewardId}"]`)?.value || 1));
   const iconName = String(document.querySelector(`[data-reward-icon="${rewardId}"]`)?.value || reward.icon || "play");
   if (!title) return showToast("Uzupełnij nazwę nagrody");
+  const childIds = Array.from(document.querySelectorAll(`[data-reward-child="${rewardId}"]:checked`)).map((input) => input.value);
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("save_reward", { rewardId, title, cost, icon: iconName, childIds }, { view: "rewardsAdmin" });
+    return;
+  }
   reward.title = title;
   reward.cost = cost;
   reward.icon = iconName;
-  reward.childIds = Array.from(document.querySelectorAll(`[data-reward-child="${rewardId}"]:checked`)).map((input) => input.value);
+  reward.childIds = childIds;
   if (!reward.childIds.length) reward.childIds = Object.keys(state.children);
   showToast("Nagroda zapisana");
 }
 
 function toggleExcuse(childId) {
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("toggle_excuse", { childId, date: dateKey() }, { view: "dayAdmin" });
+    return;
+  }
   const key = excuseKey(childId);
   if (state.dayExcuses[key]) delete state.dayExcuses[key];
   else state.dayExcuses[key] = { childId, date: dateKey(), createdAt: Date.now() };
@@ -1927,6 +2103,10 @@ function saveSchoolDayOverride(event) {
   const key = String(data.get("date") || "").trim();
   const note = String(data.get("note") || "").trim();
   if (!key) return showToast("Wybierz datę");
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("save_school_day_override", { date: key, note }, { view: "dayAdmin" });
+    return;
+  }
   state.dayOverrides[key] = {
     type: "schoolFree",
     note,
@@ -1936,6 +2116,10 @@ function saveSchoolDayOverride(event) {
 }
 
 function deleteSchoolDayOverride(key) {
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("delete_school_day_override", { date: key }, { view: "dayAdmin" });
+    return;
+  }
   delete state.dayOverrides[key];
   showToast("Wyjątek szkolny usunięty");
 }
@@ -1948,6 +2132,10 @@ function saveVacationRange(event) {
   const note = String(data.get("note") || "").trim();
   if (!start || !end) return showToast("Wybierz datę początku i końca");
   if (end < start) return showToast("Data końca musi być po dacie początku");
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("save_vacation_range", { start, end, note }, { view: "dayAdmin" });
+    return;
+  }
   state.vacationRanges.push({
     id: `vacation-${Date.now()}`,
     start,
@@ -1959,6 +2147,10 @@ function saveVacationRange(event) {
 }
 
 function deleteVacationRange(rangeId) {
+  if (runtimeWindow.__PLANNER_API__) {
+    runAction("delete_vacation_range", { rangeId }, { view: "dayAdmin" });
+    return;
+  }
   state.vacationRanges = (state.vacationRanges || []).filter((range) => range.id !== rangeId);
   showToast("Okres wakacji usunięty");
 }

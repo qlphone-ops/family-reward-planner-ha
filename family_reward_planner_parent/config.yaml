@@ -1,5 +1,5 @@
 name: Obowiązki dzieci (Panel rodzica)
-version: "0.1.6"
+version: "0.1.7"
 slug: family_reward_planner_parent
 description: Skrót do panelu rodzica aplikacji Obowiązki dzieci.
 arch:
@@ -13,6 +13,6 @@ ingress_port: 8098
 ingress_entry: /
 panel_icon: mdi:account-child
 panel_title: Panel rodzica
-panel_admin: true
+panel_admin: false
 options: {}
 schema: {}

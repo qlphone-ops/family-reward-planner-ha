@@ -11,6 +11,35 @@ const USERS_FILE = path.join(DATA_DIR, "planner-users.json");
 const PARENTS_FILE = path.join(DATA_DIR, "planner-parent-users.json");
 const APP_VERSION = require("./package.json").version;
 const HA_USERS_CACHE_MS = 60_000;
+const PERIOD_IDS = ["morning", "after", "evening"];
+const DEFAULT_REWARDS = [
+  { id: "movie", title: "Wybór bajki", cost: 1, icon: "play", color: "#f3b33d", childIds: [] },
+  { id: "game20", title: "20 minut grania", cost: 2, icon: "pad", color: "#2a9254", childIds: [] },
+  { id: "game30", title: "30 minut grania", cost: 3, icon: "pad", color: "#7055ca", childIds: [] },
+  { id: "weekend", title: "Nagroda weekendowa", cost: 5, icon: "calendar", color: "#315aa8", childIds: [] },
+  { id: "trip", title: "Duża wyprawa", cost: 10, icon: "compass", color: "#9aa3af", childIds: [] },
+];
+const PARENT_ACTIONS = new Set([
+  "set_theme",
+  "add_child",
+  "save_child",
+  "delete_child",
+  "add_chore",
+  "save_chore_group",
+  "delete_chore_group",
+  "move_chore_group",
+  "add_reward",
+  "save_reward",
+  "delete_reward",
+  "approve_coupon",
+  "reject_coupon",
+  "toggle_excuse",
+  "save_school_day_override",
+  "delete_school_day_override",
+  "save_vacation_range",
+  "delete_vacation_range",
+]);
+const CHILD_ACTIONS = new Set(["toggle_task", "request_reward", "redeem_coupon"]);
 
 let haUsersCache = {
   at: 0,
@@ -46,6 +75,193 @@ async function writeJson(filePath, value) {
 
 function unique(values) {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+function emptyTasks() {
+  return { morning: [], after: [], evening: [] };
+}
+
+function todayDateKey() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function safeDateKey(value) {
+  const key = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : todayDateKey();
+}
+
+function slugify(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "item";
+}
+
+function uid(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function childDesign(gender = "boy") {
+  if (gender === "girl") {
+    return { gender: "girl", accent: "#d5554d", soft: "#ffecea", avatarBg: "#ffe1dc", hair: "#d86a43" };
+  }
+  return { gender: "boy", accent: "#315aa8", soft: "#e8f2ff", avatarBg: "#dbeaff", hair: "#4d81e5" };
+}
+
+function periodIndex(id) {
+  return Math.max(0, PERIOD_IDS.indexOf(id));
+}
+
+function weekDays() {
+  return [1, 2, 3, 4, 5];
+}
+
+function currentDayIndex(dateKey = todayDateKey()) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day).getDay();
+}
+
+function isVacationWeekday(state, key) {
+  const day = currentDayIndex(key);
+  return day !== 0 && day !== 6 && (state.vacationRanges || []).some((range) => key >= range.start && key <= range.end);
+}
+
+function effectiveTaskDayIndex(state, key) {
+  if (isVacationWeekday(state, key)) return 7;
+  if (state.dayOverrides?.[key]?.type === "schoolFree") return 6;
+  return currentDayIndex(key);
+}
+
+function excuseKey(childId, key) {
+  return `${childId}:${key}`;
+}
+
+function taskAppliesOnDate(state, task, key) {
+  return (task.days || weekDays()).includes(effectiveTaskDayIndex(state, key));
+}
+
+function completionKey(childId, taskId, key) {
+  return `${childId}:${key}:${taskId}`;
+}
+
+function dailyStarKey(childId, key) {
+  return `${childId}:${key}`;
+}
+
+function isTaskDone(state, childId, task, key) {
+  return Boolean(state.completions?.[completionKey(childId, task.id, key)]);
+}
+
+function rewardAppliesToChild(reward, childId) {
+  return Boolean(reward) && (reward.childIds || []).includes(childId);
+}
+
+function normalizeState(value) {
+  const state = value && typeof value === "object" ? value : {};
+  state.settings = { theme: state.settings?.theme === "dark" ? "dark" : "light" };
+  state.dayExcuses = state.dayExcuses && typeof state.dayExcuses === "object" ? state.dayExcuses : {};
+  state.dayOverrides = state.dayOverrides && typeof state.dayOverrides === "object" ? state.dayOverrides : {};
+  state.vacationRanges = Array.isArray(state.vacationRanges) ? state.vacationRanges : [];
+  state.children = state.children && typeof state.children === "object" ? state.children : {};
+  state.rewards = Array.isArray(state.rewards) && state.rewards.length ? state.rewards : DEFAULT_REWARDS.map((reward) => ({ ...reward }));
+  state.coupons = Array.isArray(state.coupons) ? state.coupons : [];
+  state.history = Array.isArray(state.history) ? state.history : [];
+  state.completions = state.completions && typeof state.completions === "object" ? state.completions : {};
+  state.dailyStars = state.dailyStars && typeof state.dailyStars === "object" ? state.dailyStars : {};
+  state.couponEvents = Array.isArray(state.couponEvents) ? state.couponEvents : [];
+
+  const todayKey = todayDateKey();
+  Object.entries(state.children).forEach(([childId, child]) => {
+    const inferredGender = child.gender || (String(child.name || "").toLowerCase().endsWith("a") ? "girl" : "boy");
+    const design = childDesign(inferredGender);
+    child.id = child.id || childId;
+    child.name = String(child.name || "Dziecko");
+    Object.assign(child, design);
+    child.stars = Number.isFinite(Number(child.stars)) ? Math.max(0, Number(child.stars)) : 0;
+    child.tasks = { ...emptyTasks(), ...(child.tasks || {}) };
+    PERIOD_IDS.forEach((periodId) => {
+      child.tasks[periodId] = Array.isArray(child.tasks[periodId]) ? child.tasks[periodId] : [];
+      child.tasks[periodId].forEach((task, index) => {
+        task.id = task.id || uid(`${child.id}-${periodId}`);
+        task.label = String(task.label || "Obowiązek");
+        task.days = Array.isArray(task.days) && task.days.length ? task.days.map(Number) : weekDays();
+        task.groupId = task.groupId || `chore-${periodId}-${slugify(task.label)}`;
+        task.order = Number.isFinite(Number(task.order)) ? Number(task.order) : periodIndex(periodId) * 100 + index;
+        if (task.done) {
+          state.completions[completionKey(child.id, task.id, todayKey)] = {
+            childId: child.id,
+            taskId: task.id,
+            groupId: task.groupId,
+            date: todayKey,
+            doneAt: Date.now(),
+          };
+        }
+        delete task.done;
+      });
+    });
+    if (child.starAwardedToday) {
+      state.dailyStars[dailyStarKey(child.id, todayKey)] = { childId: child.id, date: todayKey, awardedAt: Date.now() };
+    }
+    delete child.starAwardedToday;
+  });
+
+  const childIds = Object.keys(state.children);
+  state.rewards = state.rewards.map((reward) => ({
+    ...reward,
+    id: String(reward.id || uid("reward")),
+    title: String(reward.title || "Nagroda"),
+    cost: Math.max(1, Number.isFinite(Number(reward.cost)) ? Number(reward.cost) : 1),
+    icon: String(reward.icon || "play"),
+    color: String(reward.color || "#315aa8"),
+    childIds: Array.isArray(reward.childIds) && reward.childIds.length ? reward.childIds.filter((id) => childIds.includes(id)) : childIds,
+  }));
+  state.coupons = state.coupons.map((coupon) => ({
+    ...coupon,
+    id: String(coupon.id || uid("coupon")),
+    status: ["pending", "ready", "used", "rejected"].includes(coupon.status) ? coupon.status : "pending",
+    createdAt: Number(coupon.createdAt || Date.now()),
+  }));
+  state.history = state.history.slice(0, 250);
+  state.couponEvents = state.couponEvents.slice(0, 250);
+  state.view = "home";
+  state.activeChildId = childIds.includes(state.activeChildId) ? state.activeChildId : (childIds[0] || "");
+  state.toast = "";
+  return state;
+}
+
+function applicableTasks(state, child, key) {
+  if (state.dayExcuses?.[excuseKey(child.id, key)]) return [];
+  return Object.values(child.tasks || {})
+    .flat()
+    .filter((task) => taskAppliesOnDate(state, task, key))
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+function taskStats(state, child, key) {
+  const tasks = applicableTasks(state, child, key);
+  const done = tasks.filter((task) => isTaskDone(state, child.id, task, key)).length;
+  return { done, total: tasks.length, remaining: Math.max(0, tasks.length - done) };
+}
+
+function addHistory(state, childId, title, note, type = "event") {
+  state.history.unshift({ id: uid("history"), childId, title, note, type, happenedAt: Date.now() });
+  state.history = state.history.slice(0, 250);
+}
+
+function addCouponEvent(state, coupon, action, note = "") {
+  state.couponEvents.unshift({
+    id: uid("coupon-event"),
+    couponId: coupon.id,
+    childId: coupon.childId,
+    rewardId: coupon.rewardId,
+    action,
+    note,
+    happenedAt: Date.now(),
+  });
+  state.couponEvents = state.couponEvents.slice(0, 250);
 }
 
 function normalizeUserId(value) {
@@ -261,10 +477,348 @@ function isAdminCandidate(req, appOptions) {
 function canAccessParent(req, appOptions) {
   const allowed = appOptions.parent_users.map(normalizeUserId).filter(Boolean);
   if (!allowed.length) {
-    return appOptions.ha_users?.length ? isAdminCandidate(req, appOptions) : true;
+    if (appOptions.ha_users?.length) return isAdminCandidate(req, appOptions);
+    return firstHeader(req, ["x-family-reward-parent-shortcut"]) === "1";
   }
   const candidates = userCandidates(req);
   return candidates.some((candidate) => allowed.includes(candidate)) || isAdminCandidate(req, appOptions);
+}
+
+function childById(state, childId) {
+  return state.children?.[childId] || null;
+}
+
+function rewardById(state, rewardId) {
+  return (state.rewards || []).find((reward) => reward.id === rewardId) || null;
+}
+
+function findTask(state, child, periodId, taskId) {
+  const periodTasks = child.tasks?.[periodId] || [];
+  return periodTasks.find((task) => task.id === taskId) || null;
+}
+
+function choreGroups(state) {
+  const groups = new Map();
+  Object.values(state.children).forEach((child) => {
+    Object.entries(child.tasks || {}).forEach(([periodId, tasks]) => {
+      tasks.forEach((task) => {
+        const groupId = task.groupId || `chore-${periodId}-${slugify(task.label)}`;
+        if (!groups.has(groupId)) {
+          groups.set(groupId, {
+            id: groupId,
+            label: task.label,
+            periodId,
+            days: task.days || weekDays(),
+            order: Number.isFinite(Number(task.order)) ? Number(task.order) : periodIndex(periodId) * 100,
+            childIds: [],
+          });
+        }
+        const group = groups.get(groupId);
+        group.order = Math.min(group.order, Number.isFinite(Number(task.order)) ? Number(task.order) : group.order);
+        if (!group.childIds.includes(child.id)) group.childIds.push(child.id);
+      });
+    });
+  });
+  return Array.from(groups.values()).sort((a, b) => a.order - b.order || periodIndex(a.periodId) - periodIndex(b.periodId));
+}
+
+function nextChoreOrder(state) {
+  const orders = choreGroups(state).map((group) => group.order);
+  return orders.length ? Math.max(...orders) + 10 : 10;
+}
+
+function findTaskByGroup(child, groupId) {
+  for (const periodId of PERIOD_IDS) {
+    const task = (child.tasks[periodId] || []).find((item) => item.groupId === groupId);
+    if (task) return { task, periodId };
+  }
+  return null;
+}
+
+function removeTaskByGroup(child, groupId) {
+  PERIOD_IDS.forEach((periodId) => {
+    child.tasks[periodId] = (child.tasks[periodId] || []).filter((task) => task.groupId !== groupId);
+  });
+}
+
+function sortTasksByOrder(state) {
+  Object.values(state.children).forEach((child) => {
+    PERIOD_IDS.forEach((periodId) => {
+      child.tasks[periodId].sort((a, b) => (a.order || 0) - (b.order || 0));
+    });
+  });
+}
+
+function setChoreOrder(state, groupId, order) {
+  Object.values(state.children).forEach((child) => {
+    Object.values(child.tasks).flat().forEach((task) => {
+      if (task.groupId === groupId) task.order = order;
+    });
+  });
+}
+
+function applyToggleTask(state, payload) {
+  const key = safeDateKey(payload.date);
+  const child = childById(state, String(payload.childId || ""));
+  if (!child) throw new Error("child_not_found");
+  const periodId = PERIOD_IDS.includes(payload.period) ? payload.period : "morning";
+  const task = findTask(state, child, periodId, String(payload.taskId || ""));
+  if (!task || !taskAppliesOnDate(state, task, key)) throw new Error("task_not_found");
+  const cKey = completionKey(child.id, task.id, key);
+  if (state.completions[cKey]) {
+    delete state.completions[cKey];
+    addHistory(state, child.id, "Obowiązek cofnięty", task.label, "task");
+  } else {
+    state.completions[cKey] = { childId: child.id, taskId: task.id, groupId: task.groupId, date: key, doneAt: Date.now() };
+    addHistory(state, child.id, "Obowiązek wykonany", task.label, "task");
+  }
+
+  const stats = taskStats(state, child, key);
+  const sKey = dailyStarKey(child.id, key);
+  if (stats.remaining === 0 && stats.total > 0 && !state.dailyStars[sKey]) {
+    child.stars += 1;
+    state.dailyStars[sKey] = { childId: child.id, date: key, awardedAt: Date.now() };
+    addHistory(state, child.id, "Gwiazdka przyznana", "Wszystkie obowiązki z dnia są wykonane", "star");
+    return `${child.name} zdobywa gwiazdkę za cały dzień`;
+  }
+  if (stats.remaining > 0 && state.dailyStars[sKey]) {
+    child.stars = Math.max(0, child.stars - 1);
+    delete state.dailyStars[sKey];
+    addHistory(state, child.id, "Gwiazdka cofnięta", "Dzień nie jest już kompletny", "star");
+    return "Gwiazdka cofnięta, bo dzień nie jest już kompletny";
+  }
+  return "";
+}
+
+function applyAction(state, type, payload = {}) {
+  const action = String(type || "");
+  switch (action) {
+    case "toggle_task":
+      return applyToggleTask(state, payload);
+
+    case "request_reward": {
+      const child = childById(state, String(payload.childId || ""));
+      const reward = rewardById(state, String(payload.rewardId || ""));
+      if (!child || !reward || !rewardAppliesToChild(reward, child.id)) throw new Error("reward_not_available");
+      if (child.stars < reward.cost) throw new Error("not_enough_stars");
+      const existing = state.coupons.find((coupon) => coupon.childId === child.id && coupon.rewardId === reward.id && coupon.status !== "used" && coupon.status !== "rejected");
+      if (existing) throw new Error("coupon_exists");
+      const coupon = { id: uid("coupon"), childId: child.id, rewardId: reward.id, status: "pending", createdAt: Date.now() };
+      state.coupons.push(coupon);
+      addHistory(state, child.id, "Nagroda zamówiona", `${reward.title} czeka na akceptację rodzica`, "reward");
+      addCouponEvent(state, coupon, "requested", "Czeka na akceptację rodzica");
+      return "Kupon czeka na akceptację rodzica";
+    }
+
+    case "redeem_coupon": {
+      const coupon = state.coupons.find((item) => item.id === String(payload.couponId || ""));
+      if (!coupon || coupon.status !== "ready") throw new Error("coupon_not_ready");
+      const child = childById(state, coupon.childId);
+      const reward = rewardById(state, coupon.rewardId);
+      if (!child || !reward) throw new Error("coupon_not_found");
+      coupon.status = "used";
+      coupon.usedAt = Date.now();
+      addHistory(state, child.id, "Kupon odebrany", `${child.name}: ${reward.title}`, "reward");
+      addCouponEvent(state, coupon, "redeemed", "Kupon odebrany przez dziecko");
+      return "Kupon wykorzystany";
+    }
+
+    case "set_theme":
+      state.settings.theme = payload.theme === "dark" ? "dark" : "light";
+      return state.settings.theme === "dark" ? "Tryb ciemny włączony" : "Tryb jasny włączony";
+
+    case "add_child": {
+      const name = String(payload.name || "").trim();
+      if (!name) throw new Error("missing_child_name");
+      const id = uid(`child-${slugify(name)}`);
+      state.children[id] = { id, name, ...childDesign(payload.gender), stars: 0, tasks: emptyTasks() };
+      state.rewards.forEach((reward) => {
+        reward.childIds = reward.childIds || [];
+        if (!reward.childIds.includes(id)) reward.childIds.push(id);
+      });
+      return "Dziecko dodane";
+    }
+
+    case "save_child": {
+      const child = childById(state, String(payload.childId || ""));
+      if (!child) throw new Error("child_not_found");
+      const name = String(payload.name || "").trim();
+      if (!name) throw new Error("missing_child_name");
+      Object.assign(child, childDesign(payload.gender), {
+        name,
+        stars: Math.max(0, Number.isFinite(Number(payload.stars)) ? Number(payload.stars) : 0),
+      });
+      return "Dziecko zapisane";
+    }
+
+    case "delete_child": {
+      const childId = String(payload.childId || "");
+      if (!state.children[childId]) throw new Error("child_not_found");
+      delete state.children[childId];
+      state.rewards.forEach((reward) => {
+        reward.childIds = (reward.childIds || []).filter((id) => id !== childId);
+      });
+      state.coupons = state.coupons.filter((coupon) => coupon.childId !== childId);
+      Object.keys(state.completions).forEach((key) => key.startsWith(`${childId}:`) && delete state.completions[key]);
+      Object.keys(state.dailyStars).forEach((key) => key.startsWith(`${childId}:`) && delete state.dailyStars[key]);
+      Object.keys(state.dayExcuses).forEach((key) => key.startsWith(`${childId}:`) && delete state.dayExcuses[key]);
+      return "Karta dziecka usunięta";
+    }
+
+    case "add_chore": {
+      const label = String(payload.label || "").trim();
+      const period = PERIOD_IDS.includes(payload.period) ? payload.period : "morning";
+      const childIds = Array.isArray(payload.childIds) ? payload.childIds.filter((id) => state.children[id]) : [];
+      const days = Array.isArray(payload.days) ? payload.days.map(Number).filter((day) => [0, 1, 2, 3, 4, 5, 6, 7].includes(day)) : [];
+      if (!label || !childIds.length || !days.length) throw new Error("invalid_chore");
+      const groupId = uid(`chore-${slugify(label)}`);
+      const order = nextChoreOrder(state);
+      childIds.forEach((childId) => {
+        state.children[childId].tasks[period].push({ id: uid(`${childId}-${period}`), groupId, order, label, days });
+      });
+      sortTasksByOrder(state);
+      return "Obowiązek dodany";
+    }
+
+    case "save_chore_group": {
+      const groupId = String(payload.groupId || "");
+      const current = choreGroups(state).find((group) => group.id === groupId);
+      if (!current) throw new Error("chore_not_found");
+      const label = String(payload.label || "").trim();
+      const period = PERIOD_IDS.includes(payload.period) ? payload.period : current.periodId;
+      const childIds = Array.isArray(payload.childIds) ? payload.childIds.filter((id) => state.children[id]) : [];
+      const days = Array.isArray(payload.days) ? payload.days.map(Number).filter((day) => [0, 1, 2, 3, 4, 5, 6, 7].includes(day)) : [];
+      if (!label || !childIds.length || !days.length) throw new Error("invalid_chore");
+      Object.values(state.children).forEach((child) => {
+        const existing = findTaskByGroup(child, groupId);
+        if (!childIds.includes(child.id)) {
+          removeTaskByGroup(child, groupId);
+          return;
+        }
+        if (existing) {
+          removeTaskByGroup(child, groupId);
+          child.tasks[period].push({ ...existing.task, label, days, order: current.order, groupId });
+          return;
+        }
+        child.tasks[period].push({ id: uid(`${child.id}-${period}`), groupId, order: current.order, label, days });
+      });
+      sortTasksByOrder(state);
+      return "Obowiązek zapisany";
+    }
+
+    case "delete_chore_group":
+      Object.values(state.children).forEach((child) => removeTaskByGroup(child, String(payload.groupId || "")));
+      return "Obowiązek usunięty";
+
+    case "move_chore_group": {
+      const groups = choreGroups(state);
+      const index = groups.findIndex((group) => group.id === String(payload.groupId || ""));
+      const next = index + Number(payload.direction || 0);
+      if (index < 0 || next < 0 || next >= groups.length) return "";
+      const currentOrder = groups[index].order;
+      setChoreOrder(state, groups[index].id, groups[next].order);
+      setChoreOrder(state, groups[next].id, currentOrder);
+      sortTasksByOrder(state);
+      return "Kolejność zmieniona";
+    }
+
+    case "add_reward": {
+      const title = String(payload.title || "").trim();
+      const childIds = Array.isArray(payload.childIds) ? payload.childIds.filter((id) => state.children[id]) : [];
+      if (!title || !childIds.length) throw new Error("invalid_reward");
+      state.rewards.push({
+        id: uid("reward"),
+        title,
+        cost: Math.max(1, Number.isFinite(Number(payload.cost)) ? Number(payload.cost) : 1),
+        icon: String(payload.icon || "play"),
+        color: "#315aa8",
+        childIds,
+      });
+      return "Nagroda dodana";
+    }
+
+    case "save_reward": {
+      const reward = rewardById(state, String(payload.rewardId || ""));
+      if (!reward) throw new Error("reward_not_found");
+      const title = String(payload.title || "").trim();
+      if (!title) throw new Error("invalid_reward");
+      const childIds = Array.isArray(payload.childIds) ? payload.childIds.filter((id) => state.children[id]) : [];
+      reward.title = title;
+      reward.cost = Math.max(1, Number.isFinite(Number(payload.cost)) ? Number(payload.cost) : 1);
+      reward.icon = String(payload.icon || reward.icon || "play");
+      reward.childIds = childIds.length ? childIds : Object.keys(state.children);
+      return "Nagroda zapisana";
+    }
+
+    case "delete_reward":
+      state.rewards = state.rewards.filter((reward) => reward.id !== String(payload.rewardId || ""));
+      state.coupons = state.coupons.filter((coupon) => coupon.rewardId !== String(payload.rewardId || ""));
+      return "Nagroda usunięta";
+
+    case "approve_coupon": {
+      const coupon = state.coupons.find((item) => item.id === String(payload.couponId || ""));
+      if (!coupon || coupon.status !== "pending") throw new Error("coupon_not_pending");
+      const child = childById(state, coupon.childId);
+      const reward = rewardById(state, coupon.rewardId);
+      if (!child || !reward) throw new Error("coupon_not_found");
+      if (child.stars < reward.cost) throw new Error("not_enough_stars");
+      child.stars -= reward.cost;
+      coupon.status = "ready";
+      coupon.approvedAt = Date.now();
+      addHistory(state, child.id, "Nagroda zatwierdzona", `${reward.title} za ${reward.cost} gwiazdek`, "reward");
+      addCouponEvent(state, coupon, "approved", "Rodzic zatwierdził kupon");
+      return "Rodzic zatwierdził kupon";
+    }
+
+    case "reject_coupon": {
+      const coupon = state.coupons.find((item) => item.id === String(payload.couponId || ""));
+      if (!coupon) throw new Error("coupon_not_found");
+      const child = childById(state, coupon.childId);
+      const reward = rewardById(state, coupon.rewardId);
+      coupon.status = "rejected";
+      coupon.rejectedAt = Date.now();
+      addHistory(state, coupon.childId, "Nagroda odrzucona", `${child?.name || "Dziecko"}: ${reward?.title || "nagroda"}`, "reward");
+      addCouponEvent(state, coupon, "rejected", "Rodzic odrzucił prośbę");
+      return "Prośba została odrzucona";
+    }
+
+    case "toggle_excuse": {
+      const childId = String(payload.childId || "");
+      if (!state.children[childId]) throw new Error("child_not_found");
+      const key = excuseKey(childId, safeDateKey(payload.date));
+      if (state.dayExcuses[key]) {
+        delete state.dayExcuses[key];
+        return "Usprawiedliwienie cofnięte";
+      }
+      state.dayExcuses[key] = { childId, date: safeDateKey(payload.date), createdAt: Date.now() };
+      return "Dzień usprawiedliwiony";
+    }
+
+    case "save_school_day_override": {
+      const key = safeDateKey(payload.date);
+      state.dayOverrides[key] = { type: "schoolFree", note: String(payload.note || "").trim(), createdAt: Date.now() };
+      return "Dzień wolny od szkoły zapisany";
+    }
+
+    case "delete_school_day_override":
+      delete state.dayOverrides[safeDateKey(payload.date)];
+      return "Wyjątek szkolny usunięty";
+
+    case "save_vacation_range": {
+      const start = safeDateKey(payload.start);
+      const end = safeDateKey(payload.end);
+      if (end < start) throw new Error("invalid_vacation_range");
+      state.vacationRanges.push({ id: uid("vacation"), start, end, note: String(payload.note || "").trim(), createdAt: Date.now() });
+      return "Okres wakacji zapisany";
+    }
+
+    case "delete_vacation_range":
+      state.vacationRanges = (state.vacationRanges || []).filter((range) => range.id !== String(payload.rangeId || ""));
+      return "Okres wakacji usunięty";
+
+    default:
+      throw new Error("unknown_action");
+  }
 }
 
 function json(res, status, body) {
@@ -274,6 +828,16 @@ function json(res, status, body) {
     "cache-control": "no-store",
   });
   res.end(payload);
+}
+
+function jsonForScript(value) {
+  return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, (char) => {
+    if (char === "<") return "\\u003c";
+    if (char === ">") return "\\u003e";
+    if (char === "&") return "\\u0026";
+    if (char === "\u2028") return "\\u2028";
+    return "\\u2029";
+  });
 }
 
 async function readBody(req) {
@@ -286,7 +850,12 @@ async function serveIndex(req, res, moduleName, appOptions) {
   if (moduleName === "parent" && !canAccessParent(req, appOptions)) {
     return json(res, 403, { error: "parent_module_forbidden" });
   }
-  const state = await readJson(STATE_FILE, null);
+  const rawState = await readJson(STATE_FILE, null);
+  const rawStatePayload = JSON.stringify(rawState || null);
+  const state = normalizeState(rawState);
+  if (rawStatePayload !== JSON.stringify(state)) {
+    await writeJson(STATE_FILE, state);
+  }
   const [html, css, js] = await Promise.all([
     fs.readFile(path.join(ROOT, "index.html"), "utf8"),
     fs.readFile(path.join(ROOT, "styles.css"), "utf8"),
@@ -295,8 +864,8 @@ async function serveIndex(req, res, moduleName, appOptions) {
   const bootstrap = [
     "<script>",
     `window.__PLANNER_API__ = true;`,
-    `window.__PLANNER_MODULE__ = ${JSON.stringify(moduleName)};`,
-    `window.__PLANNER_OPTIONS__ = ${JSON.stringify({
+    `window.__PLANNER_MODULE__ = ${jsonForScript(moduleName)};`,
+    `window.__PLANNER_OPTIONS__ = ${jsonForScript({
       child_module_title: appOptions.child_module_title,
       parent_module_title: appOptions.parent_module_title,
       parent_users: appOptions.parent_users,
@@ -307,7 +876,7 @@ async function serveIndex(req, res, moduleName, appOptions) {
       users_source: appOptions.users_source,
       current_user: appOptions.current_user,
     })};`,
-    `window.__PLANNER_STATE__ = ${JSON.stringify(state)};`,
+    `window.__PLANNER_STATE__ = ${jsonForScript(state)};`,
     "</script>",
   ].join("");
   const inlineHtml = html
@@ -406,15 +975,35 @@ async function handle(req, res) {
 
   if (pathname === "/api/state") {
     if (req.method === "GET") {
-      return json(res, 200, await readJson(STATE_FILE, null));
+      return json(res, 200, normalizeState(await readJson(STATE_FILE, null)));
     }
     if (req.method === "PUT" || req.method === "POST") {
-      const incoming = JSON.parse(await readBody(req));
-      await writeJson(STATE_FILE, incoming);
-      console.log(`Planner state saved: ${Object.keys(incoming.children || {}).length} children, ${(incoming.coupons || []).length} coupons, ${(incoming.history || []).length} history entries`);
-      return json(res, 200, { ok: true });
+      return json(res, 405, { error: "state_writes_disabled", message: "Use /api/action" });
     }
     return json(res, 405, { error: "method_not_allowed" });
+  }
+
+  if (pathname === "/api/action") {
+    if (req.method !== "POST") return json(res, 405, { error: "method_not_allowed" });
+    const incoming = JSON.parse(await readBody(req));
+    const type = String(incoming.type || "");
+    if (!CHILD_ACTIONS.has(type) && !PARENT_ACTIONS.has(type)) {
+      return json(res, 400, { error: "unknown_action" });
+    }
+    if (PARENT_ACTIONS.has(type) && !canAccessParent(req, appOptions)) {
+      return json(res, 403, { error: "parent_action_forbidden" });
+    }
+    const state = normalizeState(await readJson(STATE_FILE, null));
+    let message = "";
+    try {
+      message = applyAction(state, type, incoming.payload || {}) || "";
+    } catch (error) {
+      return json(res, 400, { error: error.message || "action_failed" });
+    }
+    const nextState = normalizeState(state);
+    await writeJson(STATE_FILE, nextState);
+    console.log(`Planner action saved: ${type}`);
+    return json(res, 200, { ok: true, state: nextState, message });
   }
 
   const requestedModule = url.searchParams.get("module") === "parent" ? "parent" : "child";

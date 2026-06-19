@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- Przebudowano zapis danych na dzienny model: `completions`, `dailyStars` i `couponEvents`.
+- Wyłączono zapis całego stanu przez klienta. Zmiany przechodzą teraz przez walidowane akcje serwerowe `/api/action`.
+- Ograniczono akcje rodzica do panelu rodzica i wskazanych kont Home Assistant/administratorów.
+- Dodano migrację starych pól `task.done` i `starAwardedToday` do nowego dziennego modelu.
+- Rozdzielono historię kuponów od historii obowiązków na poziomie danych.
+- Zabezpieczono bootstrap JSON oraz najważniejsze pola renderowane w HTML przed wstrzyknięciem kodu.
+- Dopolerowano dark mode i mobilne układy panelu rodzica dla nowych list zarządzania.
+
 ## 0.2.5
 
 - Wzmocniono zapis stanu w Home Assistant: niezapisane zmiany są ponawiane, a przy opuszczaniu aplikacji wysyłane przez `sendBeacon`/`keepalive`.
