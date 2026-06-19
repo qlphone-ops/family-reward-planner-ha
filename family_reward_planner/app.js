@@ -1003,7 +1003,7 @@ function renderShop(child) {
   const childName = escapeHtml(child.name);
   return `
     <section class="screen">
-      <div class="topbar">
+      <div class="topbar shop-topbar">
         <div class="title-block">
           <h1>Sklep nagród: ${childName}</h1>
           <p>Wybierz nagrodę</p>
@@ -1018,13 +1018,15 @@ function renderShop(child) {
         ${rewards.map((reward) => renderReward(child, reward)).join("")}
       </div>
       <section class="coupon-drawer">
-        <div class="drawer-icon">▤</div>
-        <div>
-          <h2>Szuflada kuponów</h2>
-          <p>Tu trafiają nagrody po wyborze. Rodzic zatwierdza, a kupon można odebrać teraz albo później.</p>
-          <div class="coupon-list">
-            ${coupons.length ? coupons.map(renderCoupon).join("") : `<div class="coupon"><span></span><div><h4>Brak kuponów</h4><small>Wybierz nagrodę ze sklepu.</small></div></div>`}
+        <div class="coupon-drawer-heading">
+          <div class="drawer-icon">▤</div>
+          <div class="coupon-drawer-copy">
+            <h2>Szuflada kuponów</h2>
+            <p>Tu trafiają nagrody po wyborze. Rodzic zatwierdza, a kupon można odebrać teraz albo później.</p>
           </div>
+        </div>
+        <div class="coupon-list">
+          ${coupons.length ? coupons.map(renderCoupon).join("") : `<div class="coupon coupon-empty" role="status"><span class="coupon-icon">▤</span><span class="coupon-copy"><h4>Brak kuponów</h4><small>Wybierz nagrodę ze sklepu.</small></span></div>`}
         </div>
       </section>
       ${renderRewardHistory(child)}
@@ -1067,9 +1069,11 @@ function renderCoupon(coupon) {
   return `
     <${tag} class="coupon ${coupon.status === "ready" ? "ready" : "pending"}"${action}>
       <span class="coupon-icon">${icon(reward.icon)}</span>
-      <span><h4>${escapeHtml(reward.title)}</h4><small>${note}</small></span>
-      <span class="price-badge">${reward.cost} ★</span>
-      <span class="status-badge status-${statusTone}">${statusLabel}</span>
+      <span class="coupon-copy"><h4>${escapeHtml(reward.title)}</h4><small>${note}</small></span>
+      <span class="coupon-meta">
+        <span class="price-badge">${reward.cost} ★</span>
+        <span class="status-badge status-${statusTone}">${statusLabel}</span>
+      </span>
     </${tag}>
   `;
 }
