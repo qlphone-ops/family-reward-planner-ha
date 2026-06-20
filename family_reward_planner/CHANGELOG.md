@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+- Zmniejszono pole avatara na kartach dzieci i dodano w panelu rodzica możliwość wgrania własnego zdjęcia dziecka.
+- Zmieniono nazwę pory `Po szkole` na `Popołudniu` oraz dodano paski postępu i czytelny stan wykonania dla każdej pory dnia.
+- Uporządkowano nawigację: karta dziecka ma tylko powrót do panelu głównego i wejście do sklepu, a sklep tylko powrót do karty i panelu głównego.
+- Przebudowano sklep na kompaktową siatkę nagród z grafikami, przygotowano pięć obrazów dla domyślnych nagród oraz dodano wybór grafiki lub własnego zdjęcia w panelu rodzica.
+- Dodano potwierdzenie przed wysłaniem prośby o nagrodę, aby przypadkowe dotknięcie nie tworzyło kuponu.
+- Przeprojektowano szufladę kuponów i okno odbioru, aby status oraz akcja były łatwe do odczytania na telefonie.
+- Dodano ekran `Kopia danych` dla rodzica: eksport pełnego backupu JSON i import kopii wraz ze zdjęciami.
+- Automatyczna kopia aplikacji trafia także do trwałego katalogu konfiguracji add-ona (`/config/family-reward-planner`), aby stan można było odtworzyć po utracie pliku roboczego `/data`.
+
 ## 0.3.8
 
 - Ustawiono wpis w menu `Obowiązki dzieci` jako dostępny także dla standardowych użytkowników Home Assistant (`panel_admin: false`).

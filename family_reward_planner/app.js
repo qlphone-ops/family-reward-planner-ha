@@ -13,11 +13,11 @@ const initialState = {
   vacationRanges: [],
   children: {},
   rewards: [
-    { id: "movie", title: "Wybór bajki", cost: 1, icon: "play", color: "#f3b33d", childIds: [] },
-    { id: "game20", title: "20 minut grania", cost: 2, icon: "pad", color: "#2a9254", childIds: [] },
-    { id: "game30", title: "30 minut grania", cost: 3, icon: "pad", color: "#7055ca", childIds: [] },
-    { id: "weekend", title: "Nagroda weekendowa", cost: 5, icon: "calendar", color: "#315aa8", childIds: [] },
-    { id: "trip", title: "Duża wyprawa", cost: 10, icon: "compass", color: "#9aa3af", childIds: [] },
+    { id: "movie", title: "Wybór bajki", cost: 1, icon: "play", color: "#f3b33d", imageKey: "movie-night", childIds: [] },
+    { id: "game20", title: "20 minut grania", cost: 2, icon: "pad", color: "#2a9254", imageKey: "gaming-timer", childIds: [] },
+    { id: "game30", title: "30 minut grania", cost: 3, icon: "pad", color: "#7055ca", imageKey: "gaming-desk", childIds: [] },
+    { id: "weekend", title: "Nagroda weekendowa", cost: 5, icon: "calendar", color: "#315aa8", imageKey: "weekend-outing", childIds: [] },
+    { id: "trip", title: "Duża wyprawa", cost: 10, icon: "compass", color: "#9aa3af", imageKey: "big-trip", childIds: [] },
   ],
   coupons: [],
   history: [],
@@ -36,6 +36,7 @@ const isParentModule = appModule === "parent";
 let recoveredServerPayload = "";
 let state = loadState();
 let redeemConfirmId = "";
+let purchaseConfirmId = "";
 let parentUnlocked = isParentModule;
 let parentTargetView = "parent";
 let lastSavedPayload = recoveredServerPayload || JSON.stringify(persistedStateFrom(state));
@@ -182,6 +183,27 @@ function apiUrl(name) {
   return `${base || ""}/api/${name}`;
 }
 
+function ingressUrl(value) {
+  const path = String(value || "");
+  if (!path) return "";
+  if (/^(https?:|data:)/.test(path)) return path;
+  const base = String(runtimeWindow.__PLANNER_API_BASE__ || "").replace(/\/+$/, "");
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+function safeMediaPath(value) {
+  const path = String(value || "");
+  return /^\/media\/[a-zA-Z0-9._-]+$/.test(path) ? path : "";
+}
+
+function safeImageKey(value) {
+  return ["movie-night", "gaming-timer", "gaming-desk", "weekend-outing", "big-trip"].includes(String(value || "")) ? String(value) : "";
+}
+
+function defaultImageKey(icon) {
+  return ({ play: "movie-night", pad: "gaming-desk", calendar: "weekend-outing", compass: "big-trip" })[String(icon || "")] || "";
+}
+
 function uid(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -212,6 +234,11 @@ function actionErrorLabel(error) {
     task_not_found: "Nie znaleziono obowiązku na dziś",
     invalid_chore: "Uzupełnij nazwę, dzieci i dni",
     invalid_reward: "Uzupełnij nazwę i dzieci",
+    invalid_image: "Nieprawidłowy format obrazu",
+    image_too_large: "Zdjęcie może mieć maksymalnie 4 MB",
+    invalid_backup: "Plik kopii danych ma nieprawidłowy format",
+    backup_too_large: "Kopia danych jest zbyt duża",
+    file_read_error: "Nie udało się odczytać pliku",
     invalid_vacation_range: "Data końca musi być po dacie początku",
     http_404: "Nie znaleziono akcji zapisu. Odśwież aplikację i spróbuj ponownie.",
     http_502: "Aplikacja właśnie się uruchamia. Spróbuj ponownie za chwilę.",
@@ -320,6 +347,7 @@ function normalizeState(value) {
     child.soft = design.soft;
     child.avatarBg = design.avatarBg;
     child.hair = design.hair;
+    child.avatarImage = safeMediaPath(child.avatarImage);
     child.stars = Number.isFinite(Number(child.stars)) ? Math.max(0, Number(child.stars)) : 0;
     child.tasks = { ...emptyTasks(), ...(child.tasks || {}) };
   });
@@ -367,6 +395,8 @@ function normalizeState(value) {
     cost: Math.max(1, Number.isFinite(Number(reward.cost)) ? Number(reward.cost) : 1),
     icon: String(reward.icon || "play"),
     color: String(reward.color || "#315aa8"),
+    imageKey: safeImageKey(reward.imageKey),
+    imagePath: safeMediaPath(reward.imagePath),
     childIds: reward.childIds?.length ? reward.childIds : childIds,
   }));
   value.coupons = value.coupons || [];
@@ -378,7 +408,7 @@ function normalizeState(value) {
 function periods() {
   return [
     { id: "morning", title: "Rano", art: "sun", accent: "#2a9254", soft: "#eef9f1" },
-    { id: "after", title: "Po szkole", art: "home", accent: "#315aa8", soft: "#eef4ff" },
+    { id: "after", title: "Popołudniu", art: "home", accent: "#315aa8", soft: "#eef4ff" },
     { id: "evening", title: "Wieczór", art: "moon", accent: "#7055ca", soft: "#f4f0ff" },
   ];
 }
@@ -648,11 +678,12 @@ function setView(view, childId = state.activeChildId) {
   state.view = view;
   state.activeChildId = childId;
   redeemConfirmId = "";
+  purchaseConfirmId = "";
   render();
 }
 
 function isParentView(view) {
-  return ["parent", "childrenAdmin", "edit", "rewardsAdmin", "dayAdmin", "accessAdmin"].includes(view);
+  return ["parent", "childrenAdmin", "edit", "rewardsAdmin", "dayAdmin", "accessAdmin", "backupAdmin"].includes(view);
 }
 
 function showToast(message) {
@@ -702,6 +733,7 @@ function render() {
   if (state.view === "rewardsAdmin") app.innerHTML = parentUnlocked ? renderRewardsAdmin() : renderParentGate();
   if (state.view === "dayAdmin") app.innerHTML = parentUnlocked ? renderDayAdmin() : renderParentGate();
   if (state.view === "accessAdmin") app.innerHTML = parentUnlocked ? renderAccessAdmin() : renderParentGate();
+  if (state.view === "backupAdmin") app.innerHTML = parentUnlocked ? renderBackupAdmin() : renderParentGate();
   bindEvents();
   configureScrollContainer();
 }
@@ -792,6 +824,19 @@ function renderNoChildrenHome() {
   `;
 }
 
+function renderAvatar(child, className = "") {
+  const imagePath = safeMediaPath(child.avatarImage);
+  const image = imagePath ? `<img src="${escapeAttr(ingressUrl(imagePath))}" alt="Zdjęcie ${escapeAttr(child.name)}" />` : `<div class="profile-mark">${escapeHtml(child.name.charAt(0))}</div>`;
+  return `<div class="avatar ${className}">${image}</div>`;
+}
+
+function rewardImageUrl(reward) {
+  const uploaded = safeMediaPath(reward.imagePath);
+  if (uploaded) return ingressUrl(uploaded);
+  const key = safeImageKey(reward.imageKey) || defaultImageKey(reward.icon);
+  return key ? ingressUrl(`/assets/rewards/${key}.png`) : "";
+}
+
 function renderHomeChildCard(child) {
   const stats = taskStats(child);
   const excused = isExcused(child);
@@ -802,7 +847,7 @@ function renderHomeChildCard(child) {
   return `
     <article class="child-card ${ready ? "child-card-complete" : ""}" ${styleVars(child)} data-card-child="${childId}" tabindex="0" role="button" aria-label="Otwórz kartę ${escapeAttr(child.name)}">
       <div class="child-head">
-        <div class="avatar"><div class="profile-mark">${escapeHtml(child.name.charAt(0))}</div></div>
+        ${renderAvatar(child, "child-avatar")}
         <div>
           <h2 class="child-name">${childName}</h2>
           <div class="child-meta">${excused ? "usprawiedliwiony" : ready ? "gwiazdka zdobyta" : "w trakcie"}</div>
@@ -820,10 +865,13 @@ function renderHomeChildCard(child) {
       <div class="period-summary">
         ${periods().map((period) => {
           const p = periodStats(child, period.id);
+          const percent = p.total ? Math.round((p.done / p.total) * 100) : 0;
+          const stateLabel = !p.total ? "Bez zadań" : p.done === p.total ? "Komplet" : `${p.total - p.done} do zrobienia`;
           return `<button class="period-row" data-child="${childId}">
             <span class="period-mini period-${period.art}" style="--accent:${period.accent}"><span></span></span>
-            <span>${period.title}</span>
-            <span class="count-pill">${p.done}/${p.total}</span>
+            <span class="period-row-copy"><strong>${period.title}</strong><small>${stateLabel}</small></span>
+            <span class="period-row-progress" aria-label="${p.done} z ${p.total} obowiązków wykonanych"><span style="width:${percent}%"></span></span>
+            <span class="count-pill ${p.total && p.done === p.total ? "count-complete" : ""}">${p.done}/${p.total}</span>
           </button>`;
         }).join("")}
       </div>
@@ -833,11 +881,19 @@ function renderHomeChildCard(child) {
 }
 
 function renderChildMenu(active) {
+  const isShop = active === "shop";
+  if (isShop) {
+    return `
+      <nav class="app-menu-bar" aria-label="Nawigacja sklepu">
+        <button class="menu-back" data-view="child" aria-label="Wróć do karty">← Karta</button>
+        <button data-view="home">Panel główny</button>
+      </nav>
+    `;
+  }
   return `
     <nav class="app-menu-bar" aria-label="Nawigacja dziecka">
-      <button class="${active === "child" ? "active" : ""}" data-view="child">Karta</button>
-      <button class="${active === "shop" ? "active" : ""}" data-view="shop">Sklep</button>
-      <button data-view="home">Panel główny</button>
+      <button class="menu-back" data-view="home" aria-label="Wróć do panelu głównego">← Panel główny</button>
+      <button class="active" data-view="shop">Sklep</button>
     </nav>
   `;
 }
@@ -853,7 +909,6 @@ function renderChild(child) {
     <section class="screen">
       <div class="topbar">
         <div class="child-page-title">
-          <button class="back-button" data-view="home">‹</button>
           <div class="title-block">
             <h1>Karta: ${childName}</h1>
             <p>Dzisiaj: ${stats.done} z ${stats.total} obowiązków</p>
@@ -863,7 +918,7 @@ function renderChild(child) {
       </div>
       ${renderChildMenu("child")}
       <div class="hero-card ${complete ? "hero-card-complete" : ""}" ${styleVars(child)}>
-        <div class="avatar"><div class="profile-mark">${escapeHtml(child.name.charAt(0))}</div></div>
+        ${renderAvatar(child, "hero-avatar")}
         <div class="hero-copy">
           <h2>${hero}</h2>
           <p>${excused ? "Dzisiaj nie liczymy obowiązków ani gwiazdki." : emptyToday ? "Rodzic może dodać obowiązki na ten dzień tygodnia." : complete ? "Wszystkie obowiązki są zrobione." : "Po skończeniu całego dnia wpada jedna gwiazdka."}</p>
@@ -880,9 +935,6 @@ function renderChild(child) {
         ${periods().map((period) => renderTaskSection(child, period)).join("")}
       </div>
       ${renderChildHistory(child)}
-      <div class="bottom-strip child-day-note">
-        <span>${excused ? "Dzień jest usprawiedliwiony przez rodzica." : emptyToday ? "Na dziś nie ma przypisanych obowiązków." : complete ? `Brawo ${childName}. Dzisiejsza gwiazdka jest zdobyta.` : "Dobra robota. Zostały jeszcze drobiazgi."}</span>
-      </div>
       ${toast()}
     </section>
   `;
@@ -991,11 +1043,18 @@ function historyIcon(type) {
 function renderTaskSection(child, period) {
   const stats = periodStats(child, period.id);
   const tasks = (child.tasks[period.id] || []).filter((task) => !isExcused(child) && taskAppliesToday(task)).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const percent = stats.total ? Math.round((stats.done / stats.total) * 100) : 0;
+  const complete = stats.total > 0 && stats.done === stats.total;
+  const status = !stats.total ? "Bez zadań" : complete ? "Wszystko gotowe" : `Zostało ${stats.total - stats.done}`;
   return `
-    <section class="task-section" data-art="${period.art}" style="--accent:${period.accent};--soft:${period.soft}">
+    <section class="task-section ${complete ? "period-complete" : ""}" data-art="${period.art}" style="--accent:${period.accent};--soft:${period.soft}">
       <div class="section-title">
         <span class="section-label"><span class="period-mini period-${period.art}"><span></span></span>${period.title}</span>
-        <span class="count-pill">${stats.done}/${stats.total}</span>
+        <span class="count-pill ${complete ? "count-complete" : ""}">${stats.done}/${stats.total}</span>
+      </div>
+      <div class="period-progress-block">
+        <div class="period-progress-track" aria-label="${stats.done} z ${stats.total} obowiązków wykonanych"><span style="width:${percent}%"></span></div>
+        <span class="period-state ${complete ? "complete" : ""}">${status}</span>
       </div>
       <div class="task-list">
         ${tasks.length ? tasks.map((task) => {
@@ -1037,15 +1096,16 @@ function renderShop(child) {
           <div class="drawer-icon">▤</div>
           <div class="coupon-drawer-copy">
             <h2>Szuflada kuponów</h2>
-            <p>Tu trafiają nagrody po wyborze. Rodzic zatwierdza, a kupon można odebrać teraz albo później.</p>
+            <p>${coupons.length ? `${coupons.length} ${coupons.length === 1 ? "kupon czeka" : "kupony czekają"} na kolejną akcję.` : "Tutaj pojawią się wybrane nagrody."}</p>
           </div>
+          <span class="coupon-drawer-count">${coupons.length}</span>
         </div>
         <div class="coupon-list">
           ${coupons.length ? coupons.map(renderCoupon).join("") : `<div class="coupon coupon-empty" role="status"><span class="coupon-icon">▤</span><span class="coupon-copy"><h4>Brak kuponów</h4><small>Wybierz nagrodę ze sklepu.</small></span></div>`}
         </div>
       </section>
       ${renderRewardHistory(child)}
-      <div class="bottom-strip shop-hint"><span>${bigTripHint(child)}</span></div>
+      ${renderPurchaseConfirm()}
       ${renderRedeemConfirm()}
       ${toast()}
     </section>
@@ -1062,11 +1122,12 @@ function renderReward(child, reward) {
   const selectable = canBuy && !pending && !ready;
   const tag = selectable ? "button" : "div";
   const action = selectable ? ` data-reward="${escapeAttr(reward.id)}"` : "";
+  const image = rewardImageUrl(reward);
   return `
     <${tag} class="reward-card ${selectable ? "" : "disabled"}" style="--accent:${escapeAttr(reward.color)};--soft:${reward.id === "game30" ? "#f2edff" : "#eef9f1"}"${action}>
       <span class="price-badge">${reward.cost} ★</span>
-      <div class="reward-art">${icon(reward.icon)}</div>
-      <h3>${escapeHtml(reward.title)}</h3>
+      <div class="reward-art">${image ? `<img src="${escapeAttr(image)}" alt="" />` : icon(reward.icon)}</div>
+      <span class="reward-copy"><h3>${escapeHtml(reward.title)}</h3><small>${selectable ? "Dotknij, aby wybrać" : status.label}</small></span>
       <span class="status-badge status-${status.tone}">${status.label}</span>
     </${tag}>
   `;
@@ -1081,9 +1142,10 @@ function renderCoupon(coupon) {
   const redeemable = coupon.status === "ready";
   const tag = redeemable ? "button" : "div";
   const action = redeemable ? ` data-coupon="${escapeAttr(coupon.id)}"` : ` role="status"`;
+  const image = rewardImageUrl(reward);
   return `
     <${tag} class="coupon ${coupon.status === "ready" ? "ready" : "pending"}"${action}>
-      <span class="coupon-icon">${icon(reward.icon)}</span>
+      <span class="coupon-icon">${image ? `<img src="${escapeAttr(image)}" alt="" />` : icon(reward.icon)}</span>
       <span class="coupon-copy"><h4>${escapeHtml(reward.title)}</h4><small>${note}</small></span>
       <span class="coupon-meta">
         <span class="price-badge">${reward.cost} ★</span>
@@ -1105,10 +1167,11 @@ function renderRedeemConfirm() {
   if (!coupon) return "";
   const reward = rewardById(coupon.rewardId);
   if (!reward) return "";
+  const image = rewardImageUrl(reward);
   return `
     <div class="confirm-backdrop">
-      <div class="confirm-card">
-        <span class="coupon-icon">${icon(reward.icon)}</span>
+      <div class="confirm-card coupon-redeem-confirm">
+        <span class="coupon-icon">${image ? `<img src="${escapeAttr(image)}" alt="" />` : icon(reward.icon)}</span>
         <div class="confirm-copy">
           <h2>Odebrać kupon?</h2>
           <p>${escapeHtml(reward.title)} zostanie przeniesione do historii.</p>
@@ -1116,6 +1179,28 @@ function renderRedeemConfirm() {
         <div class="confirm-actions">
           <button class="secondary" data-cancel-redeem>Anuluj</button>
           <button class="primary" data-confirm-redeem="${escapeAttr(coupon.id)}">Potwierdź odbiór</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPurchaseConfirm() {
+  const reward = state.rewards.find((item) => item.id === purchaseConfirmId);
+  const child = activeChild();
+  if (!reward || !child) return "";
+  const image = rewardImageUrl(reward);
+  return `
+    <div class="confirm-backdrop">
+      <div class="confirm-card purchase-confirm">
+        <span class="coupon-icon">${image ? `<img src="${escapeAttr(image)}" alt="" />` : icon(reward.icon)}</span>
+        <div class="confirm-copy">
+          <h2>Wybrać nagrodę?</h2>
+          <p><strong>${escapeHtml(reward.title)}</strong> kosztuje ${reward.cost} ${starWord(reward.cost)}. Rodzic zatwierdzi kupon, zanim gwiazdki zostaną odjęte.</p>
+        </div>
+        <div class="confirm-actions">
+          <button class="secondary" data-cancel-purchase>Jeszcze nie</button>
+          <button class="primary" data-confirm-purchase="${escapeAttr(reward.id)}">Wyślij prośbę</button>
         </div>
       </div>
     </div>
@@ -1199,6 +1284,7 @@ function renderParent() {
             ${renderParentMenuButton("rewardsAdmin", "Nagrody", "Sklep i dostępność", "★")}
             ${renderParentMenuButton("dayAdmin", "Kalendarz", "Wolne, choroba, wakacje", "⌂")}
             ${renderParentMenuButton("accessAdmin", "Dostęp", "Konta rodziców", "🔒")}
+            ${renderParentMenuButton("backupAdmin", "Kopia danych", "Eksport i przywracanie", "▣")}
           </div>
         </section>
       </div>
@@ -1281,7 +1367,7 @@ function renderChildAdminRow(child) {
   const childName = escapeHtml(child.name);
   return `
     <div class="child-admin-row" ${styleVars(child)}>
-      <div class="avatar compact-avatar"><div class="profile-mark">${escapeHtml(child.name.charAt(0))}</div></div>
+      ${renderAvatar(child, "compact-avatar")}
       <div class="child-admin-main">
         <div class="reward-row-top child-row-top">
           <div class="field compact-field"><label>Imię</label><input data-child-name="${childId}" value="${escapeAttr(child.name)}" /></div>
@@ -1295,6 +1381,12 @@ function renderChildAdminRow(child) {
           <div class="field compact-field"><label>Gwiazdki</label><input data-child-stars="${childId}" type="number" min="0" value="${child.stars}" /></div>
         </div>
         <p class="child-meta">${childName} · styl karty: ${child.gender === "girl" ? "dziewczynka" : "chłopiec"}</p>
+        <div class="media-picker">
+          <input type="hidden" data-child-avatar="${childId}" value="${escapeAttr(safeMediaPath(child.avatarImage))}" />
+          <label class="secondary media-file-button">Zdjęcie<input type="file" accept="image/png,image/jpeg,image/webp" data-child-avatar-file="${childId}" /></label>
+          <button class="ghost" data-upload-child-avatar="${childId}">Wgraj zdjęcie</button>
+          ${child.avatarImage ? `<button class="ghost" data-clear-child-avatar="${childId}">Usuń zdjęcie</button>` : ""}
+        </div>
       </div>
       <div class="reward-row-actions">
         <button class="primary" data-save-child="${childId}">Zapisz</button>
@@ -1340,6 +1432,31 @@ function renderAccessAdmin() {
           <button class="primary">Zapisz rodziców</button>
         </form>
         <p class="hint">${homeAssistantUsers.length ? "Pierwszą konfigurację mogą wykonać administratorzy Home Assistant. Po wybraniu rodziców panel pozostaje dostępny dla wskazanych kont oraz administratorów HA jako awaryjne wejście." : `Nie widzę jeszcze listy kont HA. Szczegóły: ${homeAssistantUsersError || usersSource || "brak informacji"}.`}</p>
+      </div>
+      ${toast()}
+    </section>
+  `;
+}
+
+function renderBackupAdmin() {
+  return `
+    <section class="parent-shell backup-admin-shell">
+      <button class="back-button" data-view="parent">‹</button>
+      <div class="title-block"><h1>Kopia danych</h1><p>Eksportuj pełną kopię lub przywróć ją po zmianie urządzenia albo reinstalacji.</p></div>
+      <div class="backup-admin-grid">
+        <section class="parent-card backup-card backup-export-card">
+          <span class="backup-symbol">↓</span>
+          <h2>Pobierz kopię</h2>
+          <p class="child-meta">Plik zawiera dzieci, obowiązki, postępy, gwiazdki, kupony, nagrody, kalendarz oraz wgrane zdjęcia.</p>
+          <button class="primary" data-export-backup>Pobierz backup</button>
+        </section>
+        <section class="parent-card backup-card backup-import-card">
+          <span class="backup-symbol">↑</span>
+          <h2>Przywróć kopię</h2>
+          <p class="child-meta">Przywrócenie zastępuje obecne dane aplikacji. Wybierz wcześniej pobrany plik JSON.</p>
+          <label class="secondary media-file-button">Wybierz plik backupu<input type="file" accept="application/json,.json" data-import-backup /></label>
+          <p class="hint">Aplikacja zapisuje także automatyczną kopię na dysku Home Assistant. Eksport jest dodatkowym zabezpieczeniem, które możesz przechować poza HA.</p>
+        </section>
       </div>
       ${toast()}
     </section>
@@ -1448,6 +1565,8 @@ function renderRewardsAdmin() {
               <div class="field"><label>Koszt</label><input name="cost" required type="number" min="1" value="1" /></div>
               <div class="field"><label>Typ</label>${renderRewardIconSelect("icon")}</div>
             </div>
+            <div class="field"><label>Grafika</label>${renderRewardImageSelect("imageKey")}</div>
+            <label class="secondary media-file-button">Własne zdjęcie<input type="file" accept="image/png,image/jpeg,image/webp" data-new-reward-image /></label>
             <div class="child-picker">${Object.values(state.children).map((child) => `<label><input type="checkbox" name="children" value="${escapeAttr(child.id)}" checked /> ${escapeHtml(child.name)}</label>`).join("")}</div>
             <button class="primary">Dodaj nagrodę</button>
           </form>
@@ -1475,16 +1594,35 @@ function renderRewardIconSelect(name, selected = "play", dataAttr = "") {
   return `<select name="${name}" ${dataAttr}>${options.map(([value, label]) => `<option value="${value}" ${value === selected ? "selected" : ""}>${label}</option>`).join("")}</select>`;
 }
 
+function renderRewardImageSelect(name, selected = "", dataAttr = "") {
+  const options = [
+    ["movie-night", "Bajka na TV"],
+    ["gaming-timer", "Konsola i minutnik"],
+    ["gaming-desk", "Stanowisko gamingowe"],
+    ["weekend-outing", "Weekendowy wypad"],
+    ["big-trip", "Duża wyprawa"],
+  ];
+  const current = safeImageKey(selected) || "movie-night";
+  return `<select name="${name}" ${dataAttr}>${options.map(([value, label]) => `<option value="${value}" ${value === current ? "selected" : ""}>${label}</option>`).join("")}</select>`;
+}
+
 function renderRewardAdminRow(reward) {
   const rewardId = escapeAttr(reward.id);
+  const image = rewardImageUrl(reward);
   return `
     <div class="reward-admin-row">
-      <span class="coupon-icon">${icon(reward.icon)}</span>
+      <span class="coupon-icon">${image ? `<img src="${escapeAttr(image)}" alt="" />` : icon(reward.icon)}</span>
       <div class="reward-admin-main">
         <div class="reward-row-top">
           <div class="field compact-field"><label>Nazwa</label><input data-reward-title="${rewardId}" value="${escapeAttr(reward.title)}" aria-label="Nazwa nagrody" /></div>
           <div class="field compact-field"><label>Koszt</label><input data-reward-cost="${rewardId}" type="number" min="1" value="${reward.cost}" aria-label="Koszt nagrody" /></div>
           <div class="field compact-field"><label>Typ</label>${renderRewardIconSelect("reward-icon", reward.icon, `data-reward-icon="${rewardId}" aria-label="Typ nagrody"`)}</div>
+        </div>
+        <div class="media-picker reward-media-picker">
+          <input type="hidden" data-reward-image-path="${rewardId}" value="${escapeAttr(safeMediaPath(reward.imagePath))}" />
+          ${renderRewardImageSelect("reward-image-key", reward.imageKey || defaultImageKey(reward.icon), `data-reward-image-key="${rewardId}" aria-label="Grafika nagrody"`)}
+          <label class="secondary media-file-button">Własne zdjęcie<input type="file" accept="image/png,image/jpeg,image/webp" data-reward-image-file="${rewardId}" /></label>
+          ${reward.imagePath ? `<button class="ghost" data-clear-reward-image="${rewardId}">Usuń zdjęcie</button>` : ""}
         </div>
         <div class="reward-admin-meta">
           <span class="status-badge">${reward.cost} ${starWord(reward.cost)}</span>
@@ -1667,6 +1805,9 @@ function bindEvents() {
   document.querySelectorAll("[data-reward]").forEach((button) => {
     button.addEventListener("click", () => requestReward(button.dataset.reward));
   });
+  document.querySelectorAll("[data-confirm-purchase]").forEach((button) => {
+    button.addEventListener("click", () => confirmPurchase(button.dataset.confirmPurchase));
+  });
   document.querySelectorAll("[data-coupon]").forEach((button) => {
     button.addEventListener("click", () => handleCoupon(button.dataset.coupon));
   });
@@ -1683,10 +1824,20 @@ function bindEvents() {
     redeemConfirmId = "";
     render();
   });
+  document.querySelector("[data-cancel-purchase]")?.addEventListener("click", () => {
+    purchaseConfirmId = "";
+    render();
+  });
   document.querySelector("[data-parent-login]")?.addEventListener("submit", unlockParent);
   document.querySelector("[data-child-form]")?.addEventListener("submit", saveChild);
   document.querySelectorAll("[data-save-child]").forEach((button) => {
     button.addEventListener("click", () => saveChildSettings(button.dataset.saveChild));
+  });
+  document.querySelectorAll("[data-upload-child-avatar]").forEach((button) => {
+    button.addEventListener("click", () => uploadChildAvatar(button.dataset.uploadChildAvatar));
+  });
+  document.querySelectorAll("[data-clear-child-avatar]").forEach((button) => {
+    button.addEventListener("click", () => clearChildAvatar(button.dataset.clearChildAvatar));
   });
   document.querySelectorAll("[data-delete-child]").forEach((button) => {
     button.addEventListener("click", () => deleteChild(button.dataset.deleteChild));
@@ -1720,6 +1871,11 @@ function bindEvents() {
   document.querySelectorAll("[data-save-reward-children]").forEach((button) => {
     button.addEventListener("click", () => saveRewardChildren(button.dataset.saveRewardChildren));
   });
+  document.querySelectorAll("[data-clear-reward-image]").forEach((button) => {
+    button.addEventListener("click", () => clearRewardImage(button.dataset.clearRewardImage));
+  });
+  document.querySelector("[data-export-backup]")?.addEventListener("click", exportBackup);
+  document.querySelector("[data-import-backup]")?.addEventListener("change", (event) => importBackupFile(event.currentTarget.files?.[0]));
   document.querySelectorAll("[data-toggle-excuse]").forEach((button) => {
     button.addEventListener("click", () => toggleExcuse(button.dataset.toggleExcuse));
   });
@@ -1781,8 +1937,24 @@ function toggleTask(period, taskId) {
 function requestReward(rewardId) {
   const child = activeChild();
   if (!child) return;
+  const reward = rewardById(rewardId);
+  if (!reward) return showToast("Nie znaleziono nagrody");
+  if (!rewardAppliesToChild(reward, child.id)) return showToast("Ta nagroda nie jest dostępna dla tego dziecka");
+  if (child.stars < reward.cost) return showToast("Za mało gwiazdek na tę nagrodę");
+  purchaseConfirmId = reward.id;
+  render();
+}
+
+function confirmPurchase(rewardId) {
+  const child = activeChild();
+  if (!child) return;
   if (runtimeWindow.__PLANNER_API__) {
-    runAction("request_reward", { childId: child.id, rewardId }, { view: "shop", childId: child.id });
+    runAction("request_reward", { childId: child.id, rewardId }, { view: "shop", childId: child.id }).then((saved) => {
+      if (saved) {
+        purchaseConfirmId = "";
+        render();
+      }
+    });
     return;
   }
   const reward = rewardById(rewardId);
@@ -1793,6 +1965,7 @@ function requestReward(rewardId) {
   if (existing) return showToast("Taki kupon jest już w szufladzie");
   state.coupons.push({ id: `coupon-${Date.now()}`, childId: child.id, rewardId: reward.id, status: "pending", createdAt: Date.now() });
   addHistory(child.id, "Nagroda zamówiona", `${reward.title} czeka na akceptację rodzica`, "reward");
+  purchaseConfirmId = "";
   showToast("Kupon czeka na akceptację rodzica");
 }
 
@@ -1885,6 +2058,7 @@ function createChild(name, gender) {
     name,
     ...design,
     stars: 0,
+    avatarImage: "",
     tasks: emptyTasks(),
   };
 }
@@ -1915,14 +2089,70 @@ function saveChildSettings(childId) {
   const name = String(document.querySelector(`[data-child-name="${childId}"]`)?.value || "").trim();
   const gender = String(document.querySelector(`[data-child-gender="${childId}"]`)?.value || "boy");
   const stars = Math.max(0, Number(document.querySelector(`[data-child-stars="${childId}"]`)?.value || 0));
+  const avatarImage = safeMediaPath(document.querySelector(`[data-child-avatar="${childId}"]`)?.value);
   if (!name) return showToast("Podaj imię dziecka");
   if (runtimeWindow.__PLANNER_API__) {
-    runAction("save_child", { childId, name, gender, stars }, { view: "childrenAdmin", childId: state.activeChildId });
+    runAction("save_child", { childId, name, gender, stars, avatarImage }, { view: "childrenAdmin", childId: state.activeChildId });
     return;
   }
   const design = childDesign(gender);
-  Object.assign(child, design, { name, stars });
+  Object.assign(child, design, { name, stars, avatarImage });
   showToast("Dziecko zapisane");
+}
+
+function readFileDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("file_read_error"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadMedia(file, kind) {
+  if (!file) return "";
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type || "")) {
+    showToast("Wybierz obraz PNG, JPG albo WebP");
+    return "";
+  }
+  if (file.size > 4 * 1024 * 1024) {
+    showToast("Zdjęcie może mieć maksymalnie 4 MB");
+    return "";
+  }
+  if (!runtimeWindow.__PLANNER_API__) {
+    return readFileDataUrl(file);
+  }
+  try {
+    const data = await readFileDataUrl(file);
+    const response = await fetch(apiUrl("media"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dataUrl: data, kind }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.path) throw new Error(payload.error || `http_${response.status}`);
+    return safeMediaPath(payload.path);
+  } catch (error) {
+    showToast(actionErrorLabel(error.message || "network_error"));
+    return "";
+  }
+}
+
+async function uploadChildAvatar(childId) {
+  const input = document.querySelector(`[data-child-avatar-file="${childId}"]`);
+  const file = input?.files?.[0];
+  if (!file) return showToast("Najpierw wybierz zdjęcie");
+  const avatarImage = await uploadMedia(file, "child");
+  if (!avatarImage) return;
+  const target = document.querySelector(`[data-child-avatar="${childId}"]`);
+  if (target) target.value = avatarImage;
+  saveChildSettings(childId);
+}
+
+function clearChildAvatar(childId) {
+  const target = document.querySelector(`[data-child-avatar="${childId}"]`);
+  if (target) target.value = "";
+  saveChildSettings(childId);
 }
 
 function deleteChild(childId) {
@@ -1990,23 +2220,29 @@ function saveChore(event) {
   showToast("Obowiązek dodany");
 }
 
-function saveReward(event) {
+async function saveReward(event) {
   event.preventDefault();
   const data = new FormData(event.currentTarget);
   const title = String(data.get("title") || "").trim();
   const cost = Math.max(1, Number(data.get("cost") || 1));
   const childIds = data.getAll("children");
+  const iconName = String(data.get("icon") || "play");
+  const imageKey = safeImageKey(data.get("imageKey")) || defaultImageKey(iconName);
   if (!title || !childIds.length) return showToast("Uzupełnij nazwę i dzieci");
+  const imagePath = await uploadMedia(document.querySelector("[data-new-reward-image]")?.files?.[0], "reward");
+  if (document.querySelector("[data-new-reward-image]")?.files?.[0] && !imagePath) return;
   if (runtimeWindow.__PLANNER_API__) {
-    runAction("add_reward", { title, cost, icon: String(data.get("icon") || "play"), childIds }, { view: "rewardsAdmin" });
+    runAction("add_reward", { title, cost, icon: iconName, imageKey, imagePath, childIds }, { view: "rewardsAdmin" });
     return;
   }
   state.rewards.push({
     id: `reward-${Date.now()}`,
     title,
     cost,
-    icon: String(data.get("icon") || "play"),
+    icon: iconName,
     color: "#315aa8",
+    imageKey,
+    imagePath,
     childIds,
   });
   showToast("Nagroda dodana");
@@ -2099,24 +2335,84 @@ function deleteReward(rewardId) {
   showToast("Nagroda usunięta");
 }
 
-function saveRewardChildren(rewardId) {
+async function saveRewardChildren(rewardId) {
   const reward = rewardById(rewardId);
   if (!reward) return showToast("Nie znaleziono nagrody");
   const title = String(document.querySelector(`[data-reward-title="${rewardId}"]`)?.value || "").trim();
   const cost = Math.max(1, Number(document.querySelector(`[data-reward-cost="${rewardId}"]`)?.value || 1));
   const iconName = String(document.querySelector(`[data-reward-icon="${rewardId}"]`)?.value || reward.icon || "play");
+  const imageKey = safeImageKey(document.querySelector(`[data-reward-image-key="${rewardId}"]`)?.value) || defaultImageKey(iconName);
+  const imagePathInput = document.querySelector(`[data-reward-image-path="${rewardId}"]`);
+  let imagePath = safeMediaPath(imagePathInput?.value || reward.imagePath);
   if (!title) return showToast("Uzupełnij nazwę nagrody");
   const childIds = Array.from(document.querySelectorAll(`[data-reward-child="${rewardId}"]:checked`)).map((input) => input.value);
+  const selectedFile = document.querySelector(`[data-reward-image-file="${rewardId}"]`)?.files?.[0];
+  if (selectedFile) {
+    imagePath = await uploadMedia(selectedFile, "reward");
+    if (!imagePath) return;
+  }
   if (runtimeWindow.__PLANNER_API__) {
-    runAction("save_reward", { rewardId, title, cost, icon: iconName, childIds }, { view: "rewardsAdmin" });
+    runAction("save_reward", { rewardId, title, cost, icon: iconName, imageKey, imagePath, childIds }, { view: "rewardsAdmin" });
     return;
   }
   reward.title = title;
   reward.cost = cost;
   reward.icon = iconName;
+  reward.imageKey = imageKey;
+  reward.imagePath = imagePath;
   reward.childIds = childIds;
   if (!reward.childIds.length) reward.childIds = Object.keys(state.children);
   showToast("Nagroda zapisana");
+}
+
+function clearRewardImage(rewardId) {
+  const input = document.querySelector(`[data-reward-image-path="${rewardId}"]`);
+  if (input) input.value = "";
+  saveRewardChildren(rewardId);
+}
+
+async function exportBackup() {
+  if (!runtimeWindow.__PLANNER_API__) {
+    showToast("Backup jest dostępny po uruchomieniu dodatku w Home Assistant");
+    return;
+  }
+  try {
+    const response = await fetch(apiUrl("backup"));
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `http_${response.status}`);
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `obowiazki-dzieci-backup-${dateKey()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast("Kopia danych została pobrana");
+  } catch (error) {
+    showToast(actionErrorLabel(error.message || "network_error"));
+  }
+}
+
+async function importBackupFile(file) {
+  if (!file) return;
+  if (!runtimeWindow.__PLANNER_API__) return showToast("Import jest dostępny po uruchomieniu dodatku w Home Assistant");
+  if (!runtimeWindow.confirm("Przywrócić tę kopię? Obecne dane aplikacji zostaną zastąpione.")) return;
+  try {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    const response = await fetch(apiUrl("backup"), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(backup),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.state) throw new Error(payload.error || `http_${response.status}`);
+    applyServerState(payload.state, { view: "backupAdmin", message: "Kopia danych została przywrócona" });
+  } catch (error) {
+    showToast(actionErrorLabel(error.message || "network_error"));
+  }
 }
 
 function toggleExcuse(childId) {

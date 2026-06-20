@@ -1,5 +1,5 @@
 name: Obowiązki dzieci
-version: "0.3.8"
+version: "0.4.0"
 slug: family_reward_planner
 description: Planner obowiązków, gwiazdek, kuponów i nagród dla dzieci.
 arch:
@@ -15,6 +15,9 @@ homeassistant_api: true
 panel_icon: mdi:star-face
 panel_title: Obowiązki dzieci
 panel_admin: false
+map:
+  - type: addon_config
+    read_only: false
 options:
   child_module_title: Obowiązki dzieci
   parent_module_title: Panel rodzica

@@ -9,16 +9,24 @@ const STATE_FILE = path.join(DATA_DIR, "planner-state.json");
 const OPTIONS_FILE = path.join(DATA_DIR, "options.json");
 const USERS_FILE = path.join(DATA_DIR, "planner-users.json");
 const PARENTS_FILE = path.join(DATA_DIR, "planner-parent-users.json");
+const MEDIA_DIR = path.join(DATA_DIR, "media");
+const BACKUP_DIR = process.env.PLANNER_BACKUP_DIR || "/config/family-reward-planner";
+const AUTO_BACKUP_FILE = path.join(BACKUP_DIR, "latest-backup.json");
+const AUTO_MEDIA_DIR = path.join(BACKUP_DIR, "media");
+const BACKUP_VERSION = 1;
+const MAX_MEDIA_BYTES = 4 * 1024 * 1024;
+const MAX_BACKUP_MEDIA_BYTES = 20 * 1024 * 1024;
 const APP_VERSION = require("./package.json").version;
 const HA_USERS_CACHE_MS = 60_000;
 const PERIOD_IDS = ["morning", "after", "evening"];
 const DEFAULT_REWARDS = [
-  { id: "movie", title: "Wybór bajki", cost: 1, icon: "play", color: "#f3b33d", childIds: [] },
-  { id: "game20", title: "20 minut grania", cost: 2, icon: "pad", color: "#2a9254", childIds: [] },
-  { id: "game30", title: "30 minut grania", cost: 3, icon: "pad", color: "#7055ca", childIds: [] },
-  { id: "weekend", title: "Nagroda weekendowa", cost: 5, icon: "calendar", color: "#315aa8", childIds: [] },
-  { id: "trip", title: "Duża wyprawa", cost: 10, icon: "compass", color: "#9aa3af", childIds: [] },
+  { id: "movie", title: "Wybór bajki", cost: 1, icon: "play", color: "#f3b33d", imageKey: "movie-night", childIds: [] },
+  { id: "game20", title: "20 minut grania", cost: 2, icon: "pad", color: "#2a9254", imageKey: "gaming-timer", childIds: [] },
+  { id: "game30", title: "30 minut grania", cost: 3, icon: "pad", color: "#7055ca", imageKey: "gaming-desk", childIds: [] },
+  { id: "weekend", title: "Nagroda weekendowa", cost: 5, icon: "calendar", color: "#315aa8", imageKey: "weekend-outing", childIds: [] },
+  { id: "trip", title: "Duża wyprawa", cost: 10, icon: "compass", color: "#9aa3af", imageKey: "big-trip", childIds: [] },
 ];
+const REWARD_IMAGE_KEYS = new Set(["movie-night", "gaming-timer", "gaming-desk", "weekend-outing", "big-trip"]);
 const PARENT_ACTIONS = new Set([
   "set_theme",
   "add_child",
@@ -56,6 +64,7 @@ const MIME_TYPES = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
   ".svg": "image/svg+xml",
 };
 
@@ -72,6 +81,28 @@ async function writeJson(filePath, value) {
   const tmp = `${filePath}.${Date.now()}.tmp`;
   await fs.writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   await fs.rename(tmp, filePath);
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeMediaPath(value) {
+  const candidate = String(value || "");
+  return /^\/media\/[a-zA-Z0-9._-]+$/.test(candidate) ? candidate : "";
+}
+
+function safeImageKey(value) {
+  return REWARD_IMAGE_KEYS.has(String(value || "")) ? String(value) : "";
+}
+
+function defaultImageKey(icon) {
+  return ({ play: "movie-night", pad: "gaming-desk", calendar: "weekend-outing", compass: "big-trip" })[String(icon || "")] || "";
 }
 
 function unique(values) {
@@ -190,6 +221,7 @@ function normalizeState(value) {
     child.id = child.id || childId;
     child.name = String(child.name || "Dziecko");
     Object.assign(child, design);
+    child.avatarImage = safeMediaPath(child.avatarImage);
     child.stars = Number.isFinite(Number(child.stars)) ? Math.max(0, Number(child.stars)) : 0;
     child.tasks = { ...emptyTasks(), ...(child.tasks || {}) };
     PERIOD_IDS.forEach((periodId) => {
@@ -226,6 +258,8 @@ function normalizeState(value) {
     cost: Math.max(1, Number.isFinite(Number(reward.cost)) ? Number(reward.cost) : 1),
     icon: String(reward.icon || "play"),
     color: String(reward.color || "#315aa8"),
+    imageKey: safeImageKey(reward.imageKey),
+    imagePath: safeMediaPath(reward.imagePath),
     childIds: Array.isArray(reward.childIds) && reward.childIds.length ? reward.childIds.filter((id) => childIds.includes(id)) : childIds,
   }));
   state.coupons = state.coupons.map((coupon) => ({
@@ -240,6 +274,111 @@ function normalizeState(value) {
   state.activeChildId = childIds.includes(state.activeChildId) ? state.activeChildId : (childIds[0] || "");
   state.toast = "";
   return state;
+}
+
+async function copyDirectory(source, destination) {
+  if (!(await pathExists(source))) return;
+  await fs.mkdir(destination, { recursive: true });
+  const entries = await fs.readdir(source, { withFileTypes: true });
+  await Promise.all(entries.filter((entry) => entry.isFile()).map((entry) => fs.copyFile(path.join(source, entry.name), path.join(destination, entry.name))));
+}
+
+async function mediaBackupEntries() {
+  if (!(await pathExists(MEDIA_DIR))) return [];
+  const entries = await fs.readdir(MEDIA_DIR, { withFileTypes: true });
+  const files = entries.filter((entry) => entry.isFile() && /^[-a-zA-Z0-9_.]+\.(png|jpe?g|webp)$/i.test(entry.name));
+  let total = 0;
+  const media = [];
+  for (const entry of files) {
+    const filePath = path.join(MEDIA_DIR, entry.name);
+    const data = await fs.readFile(filePath);
+    total += data.length;
+    if (total > MAX_BACKUP_MEDIA_BYTES) throw new Error("backup_media_too_large");
+    media.push({ name: entry.name, data: data.toString("base64") });
+  }
+  return media;
+}
+
+async function writeAutomaticBackup(state) {
+  const [parentUsers, appOptions] = await Promise.all([
+    readJson(PARENTS_FILE, []),
+    readJson(OPTIONS_FILE, {}),
+  ]);
+  const snapshot = {
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    state: normalizeState(state),
+    parentUsers: Array.isArray(parentUsers) ? parentUsers : [],
+    options: appOptions && typeof appOptions === "object" ? appOptions : {},
+  };
+  await writeJson(AUTO_BACKUP_FILE, snapshot);
+  await copyDirectory(MEDIA_DIR, AUTO_MEDIA_DIR);
+}
+
+let restoreAttempt;
+async function restoreAutomaticBackupIfNeeded() {
+  if (restoreAttempt) return restoreAttempt;
+  restoreAttempt = (async () => {
+    if (await pathExists(STATE_FILE)) return false;
+    const backup = await readJson(AUTO_BACKUP_FILE, null);
+    if (!backup?.state || typeof backup.state !== "object") return false;
+    const restored = normalizeState(backup.state);
+    await writeJson(STATE_FILE, restored);
+    if (Array.isArray(backup.parentUsers)) await writeJson(PARENTS_FILE, backup.parentUsers);
+    if (backup.options && typeof backup.options === "object") await writeJson(OPTIONS_FILE, backup.options);
+    await copyDirectory(AUTO_MEDIA_DIR, MEDIA_DIR);
+    console.log("Family Reward Planner restored state from automatic backup");
+    return true;
+  })();
+  return restoreAttempt;
+}
+
+function parseMediaDataUrl(value) {
+  const match = /^data:(image\/(png|jpeg|webp));base64,([a-zA-Z0-9+/=]+)$/.exec(String(value || ""));
+  if (!match) throw new Error("invalid_image");
+  const mime = match[1];
+  const extension = match[2] === "jpeg" ? "jpg" : match[2];
+  const data = Buffer.from(match[3], "base64");
+  if (!data.length || data.length > MAX_MEDIA_BYTES) throw new Error("image_too_large");
+  return { mime, extension, data };
+}
+
+async function saveMediaUpload(payload = {}) {
+  const kind = ["child", "reward"].includes(payload.kind) ? payload.kind : "image";
+  const { extension, data } = parseMediaDataUrl(payload.dataUrl);
+  const filename = `${kind}-${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`;
+  await Promise.all([
+    fs.mkdir(MEDIA_DIR, { recursive: true }),
+    fs.mkdir(AUTO_MEDIA_DIR, { recursive: true }),
+  ]);
+  await Promise.all([
+    fs.writeFile(path.join(MEDIA_DIR, filename), data),
+    fs.writeFile(path.join(AUTO_MEDIA_DIR, filename), data),
+  ]);
+  return `/media/${filename}`;
+}
+
+async function importBackup(payload) {
+  if (!payload?.state || typeof payload.state !== "object") throw new Error("invalid_backup");
+  const restored = normalizeState(payload.state);
+  const media = Array.isArray(payload.media) ? payload.media : [];
+  let total = 0;
+  await Promise.all([fs.mkdir(MEDIA_DIR, { recursive: true }), fs.mkdir(AUTO_MEDIA_DIR, { recursive: true })]);
+  for (const item of media) {
+    if (!item || !/^[-a-zA-Z0-9_.]+\.(png|jpe?g|webp)$/i.test(String(item.name || ""))) throw new Error("invalid_backup_media");
+    const data = Buffer.from(String(item.data || ""), "base64");
+    total += data.length;
+    if (!data.length || total > MAX_BACKUP_MEDIA_BYTES) throw new Error("backup_media_too_large");
+    await Promise.all([
+      fs.writeFile(path.join(MEDIA_DIR, item.name), data),
+      fs.writeFile(path.join(AUTO_MEDIA_DIR, item.name), data),
+    ]);
+  }
+  await writeJson(STATE_FILE, restored);
+  if (Array.isArray(payload.parentUsers)) await writeJson(PARENTS_FILE, payload.parentUsers);
+  if (payload.options && typeof payload.options === "object") await writeJson(OPTIONS_FILE, payload.options);
+  await writeAutomaticBackup(restored);
+  return restored;
 }
 
 function applicableTasks(state, child, key) {
@@ -641,7 +780,7 @@ function applyAction(state, type, payload = {}) {
       const name = String(payload.name || "").trim();
       if (!name) throw new Error("missing_child_name");
       const id = uid(`child-${slugify(name)}`);
-      state.children[id] = { id, name, ...childDesign(payload.gender), stars: 0, tasks: emptyTasks() };
+      state.children[id] = { id, name, ...childDesign(payload.gender), avatarImage: "", stars: 0, tasks: emptyTasks() };
       state.rewards.forEach((reward) => {
         reward.childIds = reward.childIds || [];
         if (!reward.childIds.includes(id)) reward.childIds.push(id);
@@ -657,6 +796,7 @@ function applyAction(state, type, payload = {}) {
       Object.assign(child, childDesign(payload.gender), {
         name,
         stars: Math.max(0, Number.isFinite(Number(payload.stars)) ? Number(payload.stars) : 0),
+        avatarImage: safeMediaPath(payload.avatarImage),
       });
       return "Dziecko zapisane";
     }
@@ -742,6 +882,8 @@ function applyAction(state, type, payload = {}) {
         cost: Math.max(1, Number.isFinite(Number(payload.cost)) ? Number(payload.cost) : 1),
         icon: String(payload.icon || "play"),
         color: "#315aa8",
+        imageKey: safeImageKey(payload.imageKey) || defaultImageKey(payload.icon),
+        imagePath: safeMediaPath(payload.imagePath),
         childIds,
       });
       return "Nagroda dodana";
@@ -756,6 +898,8 @@ function applyAction(state, type, payload = {}) {
       reward.title = title;
       reward.cost = Math.max(1, Number.isFinite(Number(payload.cost)) ? Number(payload.cost) : 1);
       reward.icon = String(payload.icon || reward.icon || "play");
+      reward.imageKey = safeImageKey(payload.imageKey) || defaultImageKey(payload.icon || reward.icon);
+      reward.imagePath = safeMediaPath(payload.imagePath);
       reward.childIds = childIds.length ? childIds : Object.keys(state.children);
       return "Nagroda zapisana";
     }
@@ -878,6 +1022,7 @@ async function serveIndex(req, res, moduleName, appOptions) {
   if (rawStatePayload !== JSON.stringify(state)) {
     await writeJson(STATE_FILE, state);
   }
+  if (!(await pathExists(AUTO_BACKUP_FILE))) await writeAutomaticBackup(state);
   const [html, css, js] = await Promise.all([
     fs.readFile(path.join(ROOT, "index.html"), "utf8"),
     fs.readFile(path.join(ROOT, "styles.css"), "utf8"),
@@ -963,7 +1108,25 @@ async function serveStatic(req, res, pathname) {
   }
 }
 
+async function serveMedia(res, pathname) {
+  const filename = path.basename(String(pathname || ""));
+  if (!/^[-a-zA-Z0-9_.]+\.(png|jpe?g|webp)$/i.test(filename)) return json(res, 400, { error: "bad_media_path" });
+  const filePath = path.join(MEDIA_DIR, filename);
+  try {
+    const data = await fs.readFile(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, {
+      "content-type": MIME_TYPES[ext] || "application/octet-stream",
+      "cache-control": "private, max-age=3600",
+    });
+    res.end(data);
+  } catch {
+    json(res, 404, { error: "media_not_found" });
+  }
+}
+
 async function handle(req, res) {
+  await restoreAutomaticBackupIfNeeded();
   const currentUser = await rememberUser(req);
   const appOptions = await options(currentUser);
   const url = safeRequestUrl(req);
@@ -994,9 +1157,55 @@ async function handle(req, res) {
       const incoming = JSON.parse(await readBody(req));
       const parentUsers = unique(Array.isArray(incoming.parent_users) ? incoming.parent_users : []);
       await writeJson(PARENTS_FILE, parentUsers);
+      await writeAutomaticBackup(normalizeState(await readJson(STATE_FILE, null)));
       return json(res, 200, { ok: true, parent_users: parentUsers });
     }
     if (req.method === "GET") return json(res, 200, { parent_users: appOptions.parent_users });
+    return json(res, 405, { error: "method_not_allowed" });
+  }
+
+  if (pathname === "/api/media") {
+    if (!canAccessParent(req, appOptions)) return json(res, 403, { error: "parent_module_forbidden" });
+    if (req.method !== "POST") return json(res, 405, { error: "method_not_allowed" });
+    try {
+      const incoming = JSON.parse(await readBody(req));
+      const mediaPath = await saveMediaUpload(incoming);
+      return json(res, 200, { ok: true, path: mediaPath });
+    } catch (error) {
+      return json(res, 400, { error: error.message || "media_upload_failed" });
+    }
+  }
+
+  if (pathname === "/api/backup") {
+    if (!canAccessParent(req, appOptions)) return json(res, 403, { error: "parent_module_forbidden" });
+    if (req.method === "GET") {
+      try {
+        const [plannerState, parentUsers, appConfig, media] = await Promise.all([
+          readJson(STATE_FILE, null),
+          readJson(PARENTS_FILE, []),
+          readJson(OPTIONS_FILE, {}),
+          mediaBackupEntries(),
+        ]);
+        return json(res, 200, {
+          version: BACKUP_VERSION,
+          exportedAt: new Date().toISOString(),
+          state: normalizeState(plannerState),
+          parentUsers: Array.isArray(parentUsers) ? parentUsers : [],
+          options: appConfig && typeof appConfig === "object" ? appConfig : {},
+          media,
+        });
+      } catch (error) {
+        return json(res, 400, { error: error.message || "backup_export_failed" });
+      }
+    }
+    if (req.method === "PUT") {
+      try {
+        const restored = await importBackup(JSON.parse(await readBody(req)));
+        return json(res, 200, { ok: true, state: restored, message: "Kopia zapasowa została odtworzona" });
+      } catch (error) {
+        return json(res, 400, { error: error.message || "backup_import_failed" });
+      }
+    }
     return json(res, 405, { error: "method_not_allowed" });
   }
 
@@ -1026,6 +1235,7 @@ async function handle(req, res) {
         const message = applyAction(state, type, incoming.payload || {}) || "";
         const nextState = normalizeState(state);
         await writeJson(STATE_FILE, nextState);
+        await writeAutomaticBackup(nextState);
         return { message, state: nextState };
       });
       console.log(`Planner action saved: ${type}`);
@@ -1039,6 +1249,8 @@ async function handle(req, res) {
   const requestedModule = url.searchParams.get("module") === "parent" ? "parent" : "child";
   if (pathname === "/" || pathname === "/child") return serveIndex(req, res, requestedModule, appOptions);
   if (pathname === "/parent") return serveIndex(req, res, "parent", appOptions);
+
+  if (pathname.startsWith("/media/")) return serveMedia(res, pathname);
 
   return serveStatic(req, res, pathname);
 }
