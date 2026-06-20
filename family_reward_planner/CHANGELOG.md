@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- Przeniesiono menu karty dziecka do górnego paska obok nazwy, dnia i salda, aby ograniczyć pustą przestrzeń w widoku tabletowym.
+- Wzmocniono wskaźniki pór dnia: licznik ma teraz własny kolorowy blok `wykonane`, a pasek postępu jest wyraźniejszy w jasnym i ciemnym motywie.
+- Dla pór bez przypisanych obowiązków aplikacja pokazuje `bez zadań`, zamiast sugerować wykonanie `0/0`.
+
 ## 0.4.0
 
 - Zmniejszono pole avatara na kartach dzieci i dodano w panelu rodzica możliwość wgrania własnego zdjęcia dziecka.
