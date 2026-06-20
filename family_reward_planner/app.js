@@ -1078,27 +1078,33 @@ function renderShop(child) {
   const rewards = state.rewards.filter((reward) => rewardAppliesToChild(reward, child.id));
   const childName = escapeHtml(child.name);
   return `
-    <section class="screen">
-      <div class="topbar shop-topbar">
-        <div class="title-block">
-          <h1>Sklep nagród: ${childName}</h1>
-          <p>Wybierz nagrodę</p>
+    <section class="screen shop-screen">
+      <header class="shop-store-header">
+        <div class="shop-title-block">
+          <span class="shop-kicker">Nagrody dla</span>
+          <h1>${childName}</h1>
         </div>
-        <div class="badge balance-badge">
-          <span><small>Dostępne saldo</small></span>
+        <div class="shop-balance">
+          <span>Dostępne saldo</span>
           ${renderStarToken(child, "star-token-compact")}
         </div>
-      </div>
+      </header>
       ${renderChildMenu("shop")}
-      <div class="shop-grid">
-        ${rewards.map((reward) => renderReward(child, reward)).join("")}
-      </div>
-      <section class="coupon-drawer">
+      <section class="shop-catalog" aria-label="Katalog nagród">
+        <div class="shop-catalog-heading">
+          <div><h2>Wybierz nagrodę</h2><p>${rewards.length} ${rewards.length === 1 ? "nagroda" : "nagród"} do odkrycia</p></div>
+          <span class="shop-catalog-stars">★</span>
+        </div>
+        <div class="shop-grid">
+          ${rewards.map((reward) => renderReward(child, reward)).join("")}
+        </div>
+      </section>
+      <section class="coupon-drawer shop-coupons">
         <div class="coupon-drawer-heading">
           <div class="drawer-icon">▤</div>
           <div class="coupon-drawer-copy">
-            <h2>Szuflada kuponów</h2>
-            <p>${coupons.length ? `${coupons.length} ${coupons.length === 1 ? "kupon czeka" : "kupony czekają"} na kolejną akcję.` : "Tutaj pojawią się wybrane nagrody."}</p>
+            <h2>Twoje kupony</h2>
+            <p>${coupons.length ? `${coupons.length} ${coupons.length === 1 ? "nagroda czeka" : "nagrody czekają"} na kolejną akcję.` : "Tutaj pojawią się wybrane nagrody."}</p>
           </div>
           <span class="coupon-drawer-count">${coupons.length}</span>
         </div>
@@ -1118,19 +1124,21 @@ function renderReward(child, reward) {
   const canBuy = child.stars >= reward.cost;
   const pending = state.coupons.some((coupon) => coupon.childId === child.id && coupon.rewardId === reward.id && coupon.status === "pending");
   const ready = state.coupons.some((coupon) => coupon.childId === child.id && coupon.rewardId === reward.id && coupon.status === "ready");
-  let status = { label: canBuy ? "Dostępne" : "Za mało", tone: canBuy ? "available" : "unavailable" };
-  if (pending) status = { label: "Czeka na rodzica", tone: "pending" };
-  if (ready) status = { label: "Gotowe do odebrania", tone: "ready" };
+  const missing = Math.max(0, reward.cost - child.stars);
+  let status = { label: "Wybierz", note: "Dostępna teraz", tone: "available" };
+  if (!canBuy) status = { label: `Brakuje ${missing} ★`, note: `Cena: ${reward.cost} ★`, tone: "unavailable" };
+  if (pending) status = { label: "Czeka na rodzica", note: "Prośba wysłana", tone: "pending" };
+  if (ready) status = { label: "Kupon gotowy", note: "Odbierz go niżej", tone: "ready" };
   const selectable = canBuy && !pending && !ready;
   const tag = selectable ? "button" : "div";
   const action = selectable ? ` data-reward="${escapeAttr(reward.id)}"` : "";
   const image = rewardImageUrl(reward);
   return `
-    <${tag} class="reward-card ${selectable ? "" : "disabled"}" style="--accent:${escapeAttr(reward.color)};--soft:${reward.id === "game30" ? "#f2edff" : "#eef9f1"}"${action}>
-      <span class="price-badge">${reward.cost} ★</span>
-      <div class="reward-art">${image ? `<img src="${escapeAttr(image)}" alt="" />` : icon(reward.icon)}</div>
-      <span class="reward-copy"><h3>${escapeHtml(reward.title)}</h3><small>${selectable ? "Dotknij, aby wybrać" : status.label}</small></span>
-      <span class="status-badge status-${status.tone}">${status.label}</span>
+    <${tag} class="reward-card store-product product-${status.tone}" style="--accent:${escapeAttr(reward.color)};--soft:${reward.id === "game30" ? "#f2edff" : "#eef9f1"}"${action}>
+      <div class="reward-art product-image">${image ? `<img src="${escapeAttr(image)}" alt="" />` : icon(reward.icon)}</div>
+      <span class="price-badge product-price">${reward.cost} <b>★</b></span>
+      <span class="reward-copy product-copy"><h3>${escapeHtml(reward.title)}</h3><small>${status.note}</small></span>
+      <span class="product-cta status-${status.tone}">${status.label}</span>
     </${tag}>
   `;
 }
