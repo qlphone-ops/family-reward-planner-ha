@@ -703,13 +703,21 @@ function render() {
   if (state.view === "dayAdmin") app.innerHTML = parentUnlocked ? renderDayAdmin() : renderParentGate();
   if (state.view === "accessAdmin") app.innerHTML = parentUnlocked ? renderAccessAdmin() : renderParentGate();
   bindEvents();
-  releaseIngressScrollLock();
+  configureScrollContainer();
 }
 
-function releaseIngressScrollLock() {
-  document.documentElement.style.overflowY = "auto";
-  document.body.style.overflowY = "auto";
-  app.style.overflow = "visible";
+function configureScrollContainer() {
+  document.documentElement.style.height = "100%";
+  document.documentElement.style.overflow = "hidden";
+  document.body.style.height = "100%";
+  document.body.style.overflow = "hidden";
+  app.style.height = "100svh";
+  app.style.minHeight = "0";
+  app.style.overflowX = "hidden";
+  app.style.overflowY = "auto";
+  app.style.webkitOverflowScrolling = "touch";
+  app.style.touchAction = "pan-y";
+  void app.offsetHeight;
 }
 
 function renderTopBadges(child) {
@@ -1101,13 +1109,13 @@ function renderRedeemConfirm() {
     <div class="confirm-backdrop">
       <div class="confirm-card">
         <span class="coupon-icon">${icon(reward.icon)}</span>
-        <div>
+        <div class="confirm-copy">
           <h2>Odebrać kupon?</h2>
           <p>${escapeHtml(reward.title)} zostanie przeniesione do historii.</p>
-          <div class="confirm-actions">
-            <button class="secondary" data-cancel-redeem>Anuluj</button>
-            <button class="primary" data-confirm-redeem="${escapeAttr(coupon.id)}">Potwierdź odbiór</button>
-          </div>
+        </div>
+        <div class="confirm-actions">
+          <button class="secondary" data-cancel-redeem>Anuluj</button>
+          <button class="primary" data-confirm-redeem="${escapeAttr(coupon.id)}">Potwierdź odbiór</button>
         </div>
       </div>
     </div>

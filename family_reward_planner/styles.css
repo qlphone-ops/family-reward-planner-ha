@@ -43,18 +43,19 @@
 }
 
 html {
+  height: 100%;
   min-height: 100%;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
 }
 
 body {
   margin: 0;
+  height: 100%;
   min-height: 100vh;
   min-height: 100svh;
   overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow-y: hidden;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--ink);
   background: #ede9df;
@@ -76,11 +77,14 @@ button {
 }
 
 .app-shell {
+  height: 100vh;
+  height: 100svh;
   min-height: 100vh;
   min-height: 100svh;
-  height: auto;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 22px;
+  -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
 
@@ -2288,6 +2292,10 @@ button {
   font-size: 28px;
 }
 
+.confirm-copy {
+  min-width: 0;
+}
+
 .confirm-card h2 {
   margin: 0;
   font-size: 30px;
@@ -2834,14 +2842,14 @@ button {
     border-radius: 18px;
   }
 
-  .coupon-icon {
+  .coupon > .coupon-icon {
     grid-area: icon;
     width: 48px;
     height: 48px;
     border-radius: 14px;
   }
 
-  .coupon-copy {
+  .coupon > .coupon-copy {
     grid-area: copy;
   }
 
@@ -2889,6 +2897,7 @@ button {
     line-height: 1.25;
     text-align: center;
   }
+
 }
 
 @media (min-width: 901px) and (max-width: 1180px) {
@@ -3319,6 +3328,47 @@ button {
 
   .chore-row-top {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .confirm-card {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 14px;
+    width: min(520px, calc(100vw - 36px));
+    padding: 20px;
+    border-radius: 24px;
+  }
+
+  .confirm-card .coupon-icon {
+    grid-area: auto;
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    font-size: 24px;
+  }
+
+  .confirm-card h2 {
+    font-size: 28px;
+  }
+
+  .confirm-card p {
+    font-size: 17px;
+    line-height: 1.28;
+  }
+
+  .confirm-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .confirm-actions button {
+    width: 100%;
+    min-width: 0;
+    padding: 0 12px;
+    font-size: 14px;
   }
 }
 
