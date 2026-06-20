@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.7
+
+- Przeniesiono przewijanie do własnego kontenera aplikacji, co usuwa blokadę scrolla panelu rodzica po pierwszym wejściu w osadzonym widoku Home Assistant na iOS.
+- Naprawiono mobilny układ okna odbioru kuponu: ikona pozostaje przy treści, a przyciski są wyrównane w jednym, czytelnym wierszu.
+
 ## 0.3.6
 
 - Naprawiono okno potwierdzenia odbioru aktywnego kuponu; jest teraz prawdziwym modalem nad aplikacją i nie znika poza widokiem.
