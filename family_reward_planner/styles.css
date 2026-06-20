@@ -4289,3 +4289,185 @@ button {
     align-self: center;
   }
 }
+
+/* Child header and completion signals: compact on tablet, unmistakable at a glance. */
+.child-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.child-toolbar .child-page-title {
+  min-width: 0;
+}
+
+.child-toolbar .title-block h1 {
+  white-space: nowrap;
+}
+
+.child-toolbar .title-block p {
+  margin-top: 4px;
+}
+
+.child-toolbar .app-menu-bar {
+  width: auto;
+  margin: 0;
+}
+
+.child-toolbar .top-actions {
+  display: flex;
+  width: auto;
+  align-items: center;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.child-toolbar .badge {
+  min-height: 68px;
+}
+
+.child-toolbar .balance-badge {
+  min-width: 188px;
+}
+
+.period-completion {
+  display: grid;
+  min-width: 76px;
+  min-height: 42px;
+  place-items: center;
+  align-content: center;
+  gap: 0;
+  padding: 4px 9px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 16%, white);
+  color: var(--accent);
+  font-weight: 950;
+  text-align: center;
+}
+
+.period-completion strong {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.period-completion small {
+  margin-top: 2px;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.period-completion.complete {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 7px 15px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.period-row {
+  grid-template-columns: 36px minmax(96px, 1fr) minmax(72px, 0.9fr) auto;
+}
+
+.period-row-progress,
+.period-progress-track {
+  height: 10px;
+  background: color-mix(in srgb, var(--accent) 15%, white);
+}
+
+.task-section .section-title {
+  align-items: start;
+}
+
+.task-section .period-completion {
+  min-width: 86px;
+  min-height: 48px;
+}
+
+.task-section .period-completion strong {
+  font-size: 21px;
+}
+
+:root[data-theme="dark"] .period-completion {
+  background: color-mix(in srgb, var(--accent) 30%, var(--card));
+}
+
+:root[data-theme="dark"] .period-completion.complete {
+  background: var(--accent);
+  color: #111826;
+}
+
+@media (max-width: 1120px) {
+  .child-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .child-toolbar .app-menu-bar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .child-toolbar .top-actions {
+    justify-self: end;
+  }
+}
+
+@media (max-width: 620px) {
+  .child-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .child-toolbar .title-block h1 {
+    white-space: normal;
+  }
+
+  .child-toolbar .app-menu-bar {
+    grid-column: auto;
+    grid-row: auto;
+    order: 3;
+  }
+
+  .child-toolbar .top-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    justify-self: stretch;
+    order: 2;
+  }
+
+  .child-toolbar .badge,
+  .child-toolbar .balance-badge {
+    min-width: 0;
+    min-height: 58px;
+  }
+
+  .period-row {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icon copy completion"
+      ". progress completion";
+  }
+
+  .period-row > .period-completion {
+    grid-area: completion;
+    min-width: 64px;
+    min-height: 40px;
+    align-self: center;
+  }
+
+  .period-row > .period-completion strong {
+    font-size: 16px;
+  }
+
+  .period-row > .period-completion small {
+    font-size: 8px;
+  }
+
+  .task-section .period-completion {
+    min-width: 70px;
+    min-height: 42px;
+  }
+}

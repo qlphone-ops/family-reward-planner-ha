@@ -867,11 +867,12 @@ function renderHomeChildCard(child) {
           const p = periodStats(child, period.id);
           const percent = p.total ? Math.round((p.done / p.total) * 100) : 0;
           const stateLabel = !p.total ? "Bez zadań" : p.done === p.total ? "Komplet" : `${p.total - p.done} do zrobienia`;
+          const completionLabel = p.total ? "wykonane" : "bez zadań";
           return `<button class="period-row" data-child="${childId}">
             <span class="period-mini period-${period.art}" style="--accent:${period.accent}"><span></span></span>
             <span class="period-row-copy"><strong>${period.title}</strong><small>${stateLabel}</small></span>
             <span class="period-row-progress" aria-label="${p.done} z ${p.total} obowiązków wykonanych"><span style="width:${percent}%"></span></span>
-            <span class="count-pill ${p.total && p.done === p.total ? "count-complete" : ""}">${p.done}/${p.total}</span>
+            <span class="period-completion ${p.total && p.done === p.total ? "complete" : ""}"><strong>${p.done}/${p.total}</strong><small>${completionLabel}</small></span>
           </button>`;
         }).join("")}
       </div>
@@ -907,16 +908,16 @@ function renderChild(child) {
   const hero = excused ? `${childName} ma dzień usprawiedliwiony` : emptyToday ? `${childName} nie ma dziś obowiązków` : complete ? earnedPhrase(child) : `${childName}, ${remainingPhrase(stats.remaining)}`;
   return `
     <section class="screen">
-      <div class="topbar">
+      <div class="child-toolbar">
         <div class="child-page-title">
           <div class="title-block">
             <h1>Karta: ${childName}</h1>
             <p>Dzisiaj: ${stats.done} z ${stats.total} obowiązków</p>
           </div>
         </div>
+        ${renderChildMenu("child")}
         ${renderTopBadges(child)}
       </div>
-      ${renderChildMenu("child")}
       <div class="hero-card ${complete ? "hero-card-complete" : ""}" ${styleVars(child)}>
         ${renderAvatar(child, "hero-avatar")}
         <div class="hero-copy">
@@ -1046,11 +1047,12 @@ function renderTaskSection(child, period) {
   const percent = stats.total ? Math.round((stats.done / stats.total) * 100) : 0;
   const complete = stats.total > 0 && stats.done === stats.total;
   const status = !stats.total ? "Bez zadań" : complete ? "Wszystko gotowe" : `Zostało ${stats.total - stats.done}`;
+  const completionLabel = stats.total ? "wykonane" : "bez zadań";
   return `
     <section class="task-section ${complete ? "period-complete" : ""}" data-art="${period.art}" style="--accent:${period.accent};--soft:${period.soft}">
       <div class="section-title">
         <span class="section-label"><span class="period-mini period-${period.art}"><span></span></span>${period.title}</span>
-        <span class="count-pill ${complete ? "count-complete" : ""}">${stats.done}/${stats.total}</span>
+        <span class="period-completion ${complete ? "complete" : ""}"><strong>${stats.done}/${stats.total}</strong><small>${completionLabel}</small></span>
       </div>
       <div class="period-progress-block">
         <div class="period-progress-track" aria-label="${stats.done} z ${stats.total} obowiązków wykonanych"><span style="width:${percent}%"></span></div>
