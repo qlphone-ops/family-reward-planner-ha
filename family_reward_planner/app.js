@@ -703,6 +703,13 @@ function render() {
   if (state.view === "dayAdmin") app.innerHTML = parentUnlocked ? renderDayAdmin() : renderParentGate();
   if (state.view === "accessAdmin") app.innerHTML = parentUnlocked ? renderAccessAdmin() : renderParentGate();
   bindEvents();
+  releaseIngressScrollLock();
+}
+
+function releaseIngressScrollLock() {
+  document.documentElement.style.overflowY = "auto";
+  document.body.style.overflowY = "auto";
+  app.style.overflow = "visible";
 }
 
 function renderTopBadges(child) {
@@ -1837,7 +1844,10 @@ function handleCoupon(couponId) {
 function redeemCoupon(couponId) {
   if (runtimeWindow.__PLANNER_API__) {
     runAction("redeem_coupon", { couponId }, { view: "shop", childId: state.activeChildId }).then((saved) => {
-      if (saved) redeemConfirmId = "";
+      if (saved) {
+        redeemConfirmId = "";
+        render();
+      }
     });
     return;
   }

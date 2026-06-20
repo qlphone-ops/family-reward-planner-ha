@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.6
+
+- Naprawiono okno potwierdzenia odbioru aktywnego kuponu; jest teraz prawdziwym modalem nad aplikacją i nie znika poza widokiem.
+- Modal odbioru jest zamykany także po pozytywnej odpowiedzi serwera, więc nie pozostawia niewidzialnej warstwy blokującej sklep.
+- Wymuszono pionowe przewijanie powłoki aplikacji w Home Assistant Ingress, aby pierwszy widok panelu rodzica nie blokował dostępu do akceptacji i ustawień.
+
 ## 0.3.5
 
 - Zastąpiono ikonę dodatku wyraźnym znakiem gwiazdki i wykonanych obowiązków, czytelnym w jasnym oraz ciemnym interfejsie Home Assistant.

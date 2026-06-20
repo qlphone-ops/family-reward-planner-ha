@@ -1,6 +1,6 @@
 {
   "name": "ha-family-reward-planner",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "description": "Home Assistant add-on for child chores, stars, coupons, and parent approvals.",
   "type": "commonjs",
