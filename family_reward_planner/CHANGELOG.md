@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.8
+
+- Ustawiono wpis w menu `Obowiązki dzieci` jako dostępny także dla standardowych użytkowników Home Assistant (`panel_admin: false`).
+
 ## 0.3.7
 
 - Przeniesiono przewijanie do własnego kontenera aplikacji, co usuwa blokadę scrolla panelu rodzica po pierwszym wejściu w osadzonym widoku Home Assistant na iOS.
