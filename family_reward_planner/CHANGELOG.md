@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2
+
+- Przebudowano sklep na katalog nagród: zdjęcie produktu, cena, nazwa i status są teraz czytelne na telefonie oraz desktopie.
+- Karty nagród pokazują bezpośrednio, czy nagrodę można wybrać, czy czeka na rodzica, jest gotowa do odbioru albo ilu gwiazdek brakuje.
+- Usunięto pełne wyszarzanie niedostępnych nagród, które obniżało kontrast tekstu i obrazów.
+- Rozdzielono katalog produktów od sekcji kuponów, aby oczekujące nagrody nie mieszały się z wyborem nowych.
+
 ## 0.4.1
 
 - Przeniesiono menu karty dziecka do górnego paska obok nazwy, dnia i salda, aby ograniczyć pustą przestrzeń w widoku tabletowym.
